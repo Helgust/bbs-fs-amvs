@@ -32,6 +32,7 @@
         "iris.CustomUniformsBuilderMixin",
         "iris.CustomUniformsAccessor",
         "iris.JcppProcessorMixin",
+        "iris.IrisProgramSourceMixin",
         "iris.ShaderPackMixin",
         "iris.IrisMixin",
         "iris.SliderElementWidgetMixin",

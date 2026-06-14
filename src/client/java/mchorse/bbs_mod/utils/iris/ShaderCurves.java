@@ -27,6 +27,29 @@ public class ShaderCurves
 
     public static final String UNIFORM_IDENTIFIER = "bbs_";
 
+    /* Iris feeds the same shader-source read path (the sourceProvider that ends
+     * up in JcppProcessor.glslPreprocessSource) to every consumer of a shader
+     * pack. We may only rewrite the source destined for Iris' OWN rendering
+     * pipeline: any other mod that reads the pack to build a SEPARATE program
+     * (voxy, colorwheel, ...) would inherit our bbs_* references without the
+     * matching uniform registrations and fail to compile/link.
+     *
+     * Instead of suppressing processing per mod, we only process while reading
+     * one of Iris' own pipeline programs. IrisProgramSourceMixin publishes the
+     * program name currently being read by ProgramSet.readProgramSource. A read
+     * that never sets it (e.g. voxy's makePatch, which calls the source provider
+     * directly) or that names a non-Iris program (e.g. colorwheel's clrwl_*
+     * programs) is passed through untouched. */
+    public static final ThreadLocal<String> CURRENT_PROGRAM = ThreadLocal.withInitial(() -> null);
+
+    /* Base-name prefixes of the programs that make up an Iris/OptiFine pipeline.
+     * Third-party mods that read the pack for their own pipelines use either a
+     * different code path or their own program names, so they never match. */
+    private static final String[] IRIS_PROGRAM_PREFIXES = {
+        "gbuffers_", "shadow", "composite", "deferred",
+        "prepare", "begin", "setup", "final", "dh_"
+    };
+
     static
     {
         /* photon & Hysteria */
@@ -50,6 +73,15 @@ public class ShaderCurves
             return source;
         }
 
+        /* Only rewrite source that is being read for Iris' own pipeline (see
+         * CURRENT_PROGRAM). Everything else - other mods' separate pipelines, or
+         * reads we can't attribute - is left untouched so their shaders keep
+         * compiling. */
+        if (!isMainPipelineProgram(CURRENT_PROGRAM.get()))
+        {
+            return source;
+        }
+
         Map<String, ShaderVariable> variables = parseVariables(source);
 
         if (!variables.isEmpty())
@@ -67,6 +99,26 @@ public class ShaderCurves
         }
 
         return source;
+    }
+
+    /* A program belongs to Iris' own pipeline when its base name matches one of
+     * the standard Iris/OptiFine program prefixes. */
+    private static boolean isMainPipelineProgram(String program)
+    {
+        if (program == null)
+        {
+            return false;
+        }
+
+        for (String prefix : IRIS_PROGRAM_PREFIXES)
+        {
+            if (program.startsWith(prefix))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void removeIrrelevantVariables(String source, Map<String, ShaderVariable> variables)
