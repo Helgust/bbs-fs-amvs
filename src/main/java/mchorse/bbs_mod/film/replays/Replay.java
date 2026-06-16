@@ -24,6 +24,7 @@ public class Replay extends ValueGroup
 {
     public final ValueForm form = new ValueForm("form");
     public final ReplayKeyframes keyframes = new ReplayKeyframes("keyframes");
+    public final ReplayProcessing processing = new ReplayProcessing("processing");
     public final FormProperties properties = new FormProperties("properties");
     public final Clips actions = new Clips("actions", BBSMod.getFactoryActionClips());
 
@@ -56,6 +57,7 @@ public class Replay extends ValueGroup
 
         this.add(this.form);
         this.add(this.keyframes);
+        this.add(this.processing);
         this.add(this.properties);
         this.add(this.actions);
 

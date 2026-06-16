@@ -548,7 +548,7 @@ public class ReplayBatchProcessor
         return -Math.atan2(dy, h) * (180D / Math.PI);
     }
 
-    private static void applyDelta(Replay replay, String id, double delta)
+    public static void applyDelta(Replay replay, String id, double delta)
     {
         KeyframeChannel channel = (KeyframeChannel) replay.keyframes.get(id);
 

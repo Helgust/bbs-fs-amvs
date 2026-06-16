@@ -14,6 +14,7 @@ import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.film.replays.ReplayKeyframes;
+import mchorse.bbs_mod.film.replays.ReplayProcessingOp;
 import mchorse.bbs_mod.film.replays.Replays;
 import mchorse.bbs_mod.forms.FormUtils;
 import mchorse.bbs_mod.forms.FormUtilsClient;
@@ -81,9 +82,11 @@ import org.joml.Vector3d;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -96,7 +99,7 @@ import java.util.function.Consumer;
  */
 public class UIReplayList extends UIList<ReplayListEntry>
 {
-    private static String LAST_OFFSET = "0";
+    static String LAST_OFFSET = "0";
     private static final ProcessReplaysState PROCESS_STATE = new ProcessReplaysState();
 
     public UIFilmPanel panel;
@@ -1317,15 +1320,22 @@ public class UIReplayList extends UIList<ReplayListEntry>
         private boolean applyAdvanced(UIContext context, List<ReplayBatchProcessor.VisibleReplay> selected, List<String> selectedProperties)
         {
             String expressionText = this.advanced.expression.getText();
-            ReplayBatchProcessor.Error error = ReplayBatchProcessor.applyAdvanced(selected, selectedProperties, expressionText);
+            Film film = UIReplayList.this.panel.getData();
+            String label = UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_MODE_ADVANCED.get();
 
-            if (error == ReplayBatchProcessor.Error.INVALID_EXPRESSION)
-            {
-                context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_INVALID_EXPRESSION);
-                return false;
-            }
+            return ReplayProcessingBaker.capture(film, selected, selectedProperties,
+                () ->
+                {
+                    ReplayBatchProcessor.Error error = ReplayBatchProcessor.applyAdvanced(selected, selectedProperties, expressionText);
 
-            return error == null;
+                    if (error == ReplayBatchProcessor.Error.INVALID_EXPRESSION)
+                    {
+                        context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_INVALID_EXPRESSION);
+                    }
+
+                    return error == null;
+                },
+                (vr, pre) -> ReplayProcessingOp.expression(label, expressionText, vr.i, vr.o, selectedProperties));
         }
 
         private boolean applyNormal(UIContext context, List<ReplayBatchProcessor.VisibleReplay> selected, List<String> selectedProperties)
@@ -1366,40 +1376,57 @@ public class UIReplayList extends UIList<ReplayListEntry>
             params.lookAtTarget = this.resolveLookAtTargetReplay();
             params.groundProvider = operation == NormalOperation.FIT_HEIGHT ? this.createGroundProvider() : null;
 
-            ReplayBatchProcessor.Error error = ReplayBatchProcessor.applyNormal(selected, selectedProperties, operation.op, params);
+            final NormalOperation op = operation;
+            final Film film = UIReplayList.this.panel.getData();
+            final String label = operation.title.get();
+            final int lookAtIndex = PROCESS_STATE.lookAtTarget;
 
-            if (error == ReplayBatchProcessor.Error.NEED_TWO_CHANNELS)
-            {
-                context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NEED_TWO_CHANNELS);
-                return false;
-            }
-            else if (error == ReplayBatchProcessor.Error.NEED_THREE_CHANNELS)
-            {
-                context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NEED_THREE_CHANNELS);
-                return false;
-            }
-            else if (error == ReplayBatchProcessor.Error.NEED_Y_CHANNEL)
-            {
-                context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NEED_Y_CHANNEL);
-                return false;
-            }
-            else if (error == ReplayBatchProcessor.Error.NEED_TARGET)
-            {
-                context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NO_TARGET);
-                return false;
-            }
-            else if (error == ReplayBatchProcessor.Error.NO_WORLD)
-            {
-                context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NO_WORLD);
-                return false;
-            }
-            else if (error == ReplayBatchProcessor.Error.NEED_POSITION_CHANNELS)
-            {
-                context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NEED_THREE_CHANNELS);
-                return false;
-            }
+            return ReplayProcessingBaker.capture(film, selected, selectedProperties,
+                () ->
+                {
+                    ReplayBatchProcessor.Error error = ReplayBatchProcessor.applyNormal(selected, selectedProperties, op.op, params);
 
-            return error == null;
+                    if (error == ReplayBatchProcessor.Error.NEED_TWO_CHANNELS)
+                    {
+                        context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NEED_TWO_CHANNELS);
+                    }
+                    else if (error == ReplayBatchProcessor.Error.NEED_THREE_CHANNELS)
+                    {
+                        context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NEED_THREE_CHANNELS);
+                    }
+                    else if (error == ReplayBatchProcessor.Error.NEED_Y_CHANNEL)
+                    {
+                        context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NEED_Y_CHANNEL);
+                    }
+                    else if (error == ReplayBatchProcessor.Error.NEED_TARGET)
+                    {
+                        context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NO_TARGET);
+                    }
+                    else if (error == ReplayBatchProcessor.Error.NO_WORLD)
+                    {
+                        context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NO_WORLD);
+                    }
+                    else if (error == ReplayBatchProcessor.Error.NEED_POSITION_CHANNELS)
+                    {
+                        context.notifyError(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_ERROR_NEED_THREE_CHANNELS);
+                    }
+
+                    return error == null;
+                },
+                (vr, pre) ->
+                {
+                    if (op == NormalOperation.LOOK_AT)
+                    {
+                        return ReplayProcessingOp.lookAt(label, lookAtIndex);
+                    }
+
+                    /* Always record the preset, even when this replay's resolved delta is
+                     * zero (e.g. the reference replay of a LINE/SQUARE arrangement), so every
+                     * applied preset shows up consistently in the stack. */
+                    Map<String, Double> deltas = ReplayProcessingBaker.diff(pre.before, ReplayProcessingBaker.sampleFirstValues(vr.replay, selectedProperties));
+
+                    return ReplayProcessingOp.delta(label, deltas, 0F);
+                });
         }
 
         private ReplayBatchProcessor.GroundProvider createGroundProvider()
@@ -1778,73 +1805,96 @@ public class UIReplayList extends UIList<ReplayListEntry>
             return;
         }
 
-        UITextbox tick = new UITextbox((t) -> LAST_OFFSET = t);
-        UIConfirmOverlayPanel panel = new UIConfirmOverlayPanel(UIKeys.SCENE_REPLAYS_CONTEXT_OFFSET_TIME_TITLE, UIKeys.SCENE_REPLAYS_CONTEXT_OFFSET_TIME_DESCRIPTION, (b) ->
+        UIReplayProcessingOverlay overlay = new UIReplayProcessingOverlay(this, first);
+
+        UIOverlay.addOverlay(this.getContext(), overlay, 260, 0.7F);
+    }
+
+    /**
+     * Apply a time offset (in ticks, math expression with {@code i}/{@code o}
+     * supported) to the selected replays, recording it onto each replay's
+     * processing stack. Used by the offset window.
+     */
+    public void applyTimeOffset(String expressionText)
+    {
+        MathBuilder builder = new MathBuilder();
+        int min = Integer.MAX_VALUE;
+
+        builder.register("i");
+        builder.register("o");
+
+        IExpression parse = null;
+
+        try
         {
-            if (b)
+            parse = builder.parse(expressionText);
+        }
+        catch (Exception e)
+        {}
+
+        Film film = this.panel.getData();
+        List<Replay> selected = this.getSelectedReplaysInViewOrder();
+
+        for (Replay replay : selected)
+        {
+            int visibleI = this.getVisibleReplayIndex(replay);
+
+            if (visibleI < 0)
             {
-                MathBuilder builder = new MathBuilder();
-                int min = Integer.MAX_VALUE;
-
-                builder.register("i");
-                builder.register("o");
-
-                IExpression parse = null;
-
-                try
-                {
-                    parse = builder.parse(tick.getText());
-                }
-                catch (Exception e)
-                {}
-
-                Film film = this.panel.getData();
-                List<Replay> selected = this.getSelectedReplaysInViewOrder();
-
-                for (Replay replay : selected)
-                {
-                    int visibleI = this.getVisibleReplayIndex(replay);
-
-                    if (visibleI < 0)
-                    {
-                        continue;
-                    }
-
-                    min = Math.min(min, visibleI);
-                }
-
-                if (min == Integer.MAX_VALUE)
-                {
-                    return;
-                }
-
-                for (Replay replay : selected)
-                {
-                    int visibleI = this.getVisibleReplayIndex(replay);
-
-                    if (visibleI < 0)
-                    {
-                        continue;
-                    }
-
-                    builder.variables.get("i").set(visibleI);
-                    builder.variables.get("o").set(visibleI - min);
-
-                    float tickv = parse == null ? 0F : (float) parse.doubleValue();
-
-                    BaseValue.edit(replay, (r) -> r.shift(tickv));
-                }
+                continue;
             }
-        });
 
-        tick.setText(LAST_OFFSET);
-        tick.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_OFFSET_TIME_EXPRESSION_TOOLTIP);
-        tick.relative(panel.confirm).y(-1F, -5).w(1F).h(20);
+            min = Math.min(min, visibleI);
+        }
 
-        panel.confirm.w(1F, -10);
-        panel.content.add(tick);
+        if (min == Integer.MAX_VALUE)
+        {
+            return;
+        }
 
-        UIOverlay.addOverlay(this.getContext(), panel);
+        List<ReplayBatchProcessor.VisibleReplay> visible = new ArrayList<>();
+
+        for (Replay replay : selected)
+        {
+            int visibleI = this.getVisibleReplayIndex(replay);
+
+            if (visibleI < 0)
+            {
+                continue;
+            }
+
+            visible.add(new ReplayBatchProcessor.VisibleReplay(replay, visibleI, visibleI - min));
+        }
+
+        final IExpression expression = parse;
+        final MathBuilder mathBuilder = builder;
+        final Map<Replay, Float> shifts = new IdentityHashMap<>();
+        final String label = UIKeys.SCENE_REPLAYS_CONTEXT_OFFSET_TIME.get();
+
+        ReplayProcessingBaker.capture(film, visible, Collections.emptyList(),
+            () ->
+            {
+                for (ReplayBatchProcessor.VisibleReplay vr : visible)
+                {
+                    mathBuilder.variables.get("i").set(vr.i);
+                    mathBuilder.variables.get("o").set(vr.o);
+
+                    float tickv = expression == null ? 0F : (float) expression.doubleValue();
+
+                    shifts.put(vr.replay, tickv);
+                    vr.replay.shift(tickv);
+                }
+
+                return true;
+            },
+            (vr, pre) ->
+            {
+                float tickv = shifts.getOrDefault(vr.replay, 0F);
+
+                return tickv == 0F ? null : ReplayProcessingOp.delta(label, Collections.emptyMap(), tickv);
+            });
+
+        this.updateFilmEditor();
     }
 
     public void copyReplay()
@@ -2204,6 +2254,11 @@ public class UIReplayList extends UIList<ReplayListEntry>
         x += element.indent;
 
         Replay replay = element.replay;
+
+        if (replay.processing.isActive())
+        {
+            context.batcher.outlinedIcon(Icons.PROCESSOR, this.area.x + this.area.w - 42, y + this.scroll.scrollItemSize / 2F, 0.5F, 0.5F);
+        }
 
         if (replay.enabled.get())
         {
