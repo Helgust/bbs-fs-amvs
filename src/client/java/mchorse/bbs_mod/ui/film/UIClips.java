@@ -9,9 +9,13 @@ import mchorse.bbs_mod.camera.utils.TimeUtils;
 import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.data.types.ListType;
 import mchorse.bbs_mod.data.types.MapType;
+import mchorse.bbs_mod.film.BaseFilmController;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.replays.Replay;
+import mchorse.bbs_mod.forms.FormUtilsClient;
+import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.forms.Form;
+import mchorse.bbs_mod.forms.renderers.utils.MatrixCache;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.resources.Link;
@@ -35,12 +39,19 @@ import mchorse.bbs_mod.ui.utils.presets.UICopyPasteController;
 import mchorse.bbs_mod.ui.utils.presets.UIPresetContextMenu;
 import mchorse.bbs_mod.ui.utils.renderers.TimelineRulerRenderer;
 import mchorse.bbs_mod.utils.MathUtils;
+import mchorse.bbs_mod.utils.MatrixUtils;
+import mchorse.bbs_mod.utils.Pair;
 import mchorse.bbs_mod.utils.clips.Clip;
 import mchorse.bbs_mod.utils.clips.Clips;
 import mchorse.bbs_mod.utils.colors.Colors;
 import mchorse.bbs_mod.utils.factory.IFactory;
 import mchorse.bbs_mod.utils.keyframes.Keyframe;
 import mchorse.bbs_mod.utils.presets.PresetManager;
+import io.netty.util.collection.IntObjectHashMap;
+import io.netty.util.collection.IntObjectMap;
+import org.joml.Matrix3d;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
 import org.joml.Vector3i;
 import org.lwjgl.glfw.GLFW;
 
@@ -51,6 +62,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -591,45 +603,209 @@ public class UIClips extends UIElement
 
         this.getContext().replaceContextMenu((menu) ->
         {
-            for (Replay replay : film.replays.getList())
+            List<Replay> replays = film.replays.getList();
+
+            for (int i = 0; i < replays.size(); i++)
             {
-                Form form = replay.form.get();
+                int index = i;
+                Replay replay = replays.get(i);
 
-                menu.action(Icons.EDITOR, IKey.constant(form == null ? "-" : form.getFormIdOrName()), () ->
-                {
-                    KeyframeClip clip = new KeyframeClip();
-
-                    clip.fov.insert(0, 50D);
-
-                    clip.x.copyKeyframes(replay.keyframes.x);
-                    clip.y.copyKeyframes(replay.keyframes.y);
-                    clip.z.copyKeyframes(replay.keyframes.z);
-
-                    clip.yaw.copyKeyframes(replay.keyframes.yaw);
-                    clip.pitch.copyKeyframes(replay.keyframes.pitch);
-
-                    for (Keyframe<Double> keyframe : clip.yaw.getKeyframes())
-                    {
-                        keyframe.setValue(180D + keyframe.getValue());
-                        // keyframe.setLy(180F + keyframe.getLy());
-                        // keyframe.setRy(180F + keyframe.getRy());
-                    }
-
-                    double size = Math.max(
-                        clip.x.getLength(),
-                        Math.max(
-                            clip.y.getLength(),
-                            Math.max(
-                                clip.z.getLength(),
-                                Math.max(clip.yaw.getLength(), clip.pitch.getLength())
-                            )
-                        )
-                    );
-
-                    this.addClip(clip, this.fromGraphX(mouseX), this.fromLayerY(mouseY), (int) size);
-                });
+                menu.action(Icons.EDITOR, IKey.constant(replay.getName()), () -> this.fromReplayPickBone(replay, index, mouseX, mouseY));
             }
         });
+    }
+
+    /**
+     * Second level of the "from player recording" menu: pick which bone of the
+     * recorded form the camera rides. The bone must be chosen explicitly. When
+     * the form exposes no bones, falls back to the recorded entity (anchor)
+     * position and look direction.
+     *
+     * <p>The bones are read from the live editor entity (the same one the
+     * axes-preview gizmo is drawn from), so the sampled transforms match what is
+     * actually rendered on screen.</p>
+     */
+    private void fromReplayPickBone(Replay replay, int index, int mouseX, int mouseY)
+    {
+        IEntity entity = this.getSceneEntities().get(index);
+        Form form = entity == null ? null : entity.getForm();
+
+        List<String> bones = new ArrayList<>();
+
+        if (form != null)
+        {
+            for (String key : FormUtilsClient.getRenderer(form).collectMatrices(entity, 0F).keySet())
+            {
+                /* Skip the empty root key (the form origin), it isn't a bone */
+                if (!key.isEmpty())
+                {
+                    bones.add(key);
+                }
+            }
+
+            bones.sort(String::compareToIgnoreCase);
+        }
+
+        /* No bones available - fall back to the recorded anchor position */
+        if (bones.isEmpty())
+        {
+            this.createReplayCameraClip(replay, index, null, mouseX, mouseY);
+
+            return;
+        }
+
+        this.getContext().replaceContextMenu((menu) ->
+        {
+            for (String bone : bones)
+            {
+                menu.action(Icons.LIMB, IKey.constant(bone), () -> this.createReplayCameraClip(replay, index, bone, mouseX, mouseY));
+            }
+        });
+    }
+
+    private void createReplayCameraClip(Replay replay, int index, String bone, int mouseX, int mouseY)
+    {
+        KeyframeClip clip = new KeyframeClip();
+
+        clip.fov.insert(0, 50D);
+
+        clip.x.copyKeyframes(replay.keyframes.x);
+        clip.y.copyKeyframes(replay.keyframes.y);
+        clip.z.copyKeyframes(replay.keyframes.z);
+
+        IEntity entity = this.getSceneEntities().get(index);
+
+        if (bone != null && entity != null)
+        {
+            /* Rigidly attach the camera to the bone: both position and
+             * orientation are taken from the bone's world matrix. */
+            this.sampleBoneTransform(clip, replay, entity, bone);
+        }
+        else
+        {
+            /* Anchor fallback: ride the recorded entity position and look direction. */
+            clip.yaw.copyKeyframes(replay.keyframes.yaw);
+            clip.pitch.copyKeyframes(replay.keyframes.pitch);
+
+            for (Keyframe<Double> keyframe : clip.yaw.getKeyframes())
+            {
+                keyframe.setValue(180D + keyframe.getValue());
+            }
+        }
+
+        double size = Math.max(
+            clip.x.getLength(),
+            Math.max(
+                clip.y.getLength(),
+                Math.max(
+                    clip.z.getLength(),
+                    Math.max(clip.yaw.getLength(), clip.pitch.getLength())
+                )
+            )
+        );
+
+        this.addClip(clip, this.fromGraphX(mouseX), this.fromLayerY(mouseY), (int) size);
+    }
+
+    /**
+     * Make the camera ride the given bone: both position and orientation are
+     * taken from the bone's world matrix, sampled at each keyframe's tick.
+     *
+     * <p>Replays only store the entity's anchor (feet) transform, so to attach
+     * the camera to e.g. the head we re-evaluate the form's bone matrices at
+     * every keyframe tick on the live editor entity (the same one the gizmo is
+     * drawn from). The x/y/z channels (copied from the recording) are overwritten
+     * in place and the yaw/pitch/roll channels are rebuilt from the bone's world
+     * rotation, using the same conversion as the tracker camera clip.</p>
+     *
+     * <p>This transiently mutates the live entity; the film controller re-applies
+     * the correct cursor tick on the next frame.</p>
+     */
+    private void sampleBoneTransform(KeyframeClip clip, Replay replay, IEntity entity, String bone)
+    {
+        Form form = entity.getForm();
+
+        if (form == null)
+        {
+            return;
+        }
+
+        /* Scene entities are only needed to resolve a form-level anchor onto another actor (rare). */
+        IntObjectMap<IEntity> entities = this.getSceneEntities();
+
+        /* The x/y/z channels are independent and their keyframe sets can differ
+         * (e.g. a near-constant Y while walking on flat ground keeps far fewer
+         * keyframes than X/Z). Sample the bone once per tick across the union of
+         * all three channels and write each axis back by tick, so the channels
+         * stay aligned regardless of their individual keyframe counts. */
+        TreeSet<Integer> ticks = new TreeSet<>();
+
+        for (Keyframe<Double> keyframe : clip.x.getKeyframes()) ticks.add((int) keyframe.getTick());
+        for (Keyframe<Double> keyframe : clip.y.getKeyframes()) ticks.add((int) keyframe.getTick());
+        for (Keyframe<Double> keyframe : clip.z.getKeyframes()) ticks.add((int) keyframe.getTick());
+
+        Vector3f position = new Vector3f();
+
+        for (int tick : ticks)
+        {
+            replay.keyframes.apply(tick, entity);
+            replay.properties.applyProperties(form, tick);
+
+            /* Freeze prev == current so the matrices resolve exactly at this tick. */
+            entity.setPrevX(entity.getX());
+            entity.setPrevY(entity.getY());
+            entity.setPrevZ(entity.getZ());
+            entity.setPrevYaw(entity.getYaw());
+            entity.setPrevHeadYaw(entity.getHeadYaw());
+            entity.setPrevPitch(entity.getPitch());
+            entity.setPrevBodyYaw(entity.getBodyYaw());
+
+            MatrixCache map = FormUtilsClient.getRenderer(form).collectMatrices(entity, 0F);
+
+            if (!map.has(bone))
+            {
+                continue;
+            }
+
+            /* World transform of the entity, then offset/rotated by the bone */
+            Matrix4f matrix = BaseFilmController.getMatrixForRenderWithRotation(entity, 0, 0, 0, 0F);
+            Pair<Matrix4f, Float> total = BaseFilmController.getTotalMatrix(entities, form.anchor.get(), matrix, 0, 0, 0, 0F, 0);
+
+            if (total.a != null)
+            {
+                matrix = total.a;
+            }
+
+            matrix.mul(map.get(bone).matrix());
+
+            /* Position from the bone's world translation */
+            matrix.getTranslation(position);
+
+            clip.x.insert(tick, (double) position.x);
+            clip.y.insert(tick, (double) position.y);
+            clip.z.insert(tick, (double) position.z);
+
+            /* Orientation from the bone's world rotation (same convention as the tracker clip) */
+            Vector3f euler = MatrixUtils.cast3dTo3f(MatrixUtils.RotationOrder.YXZ.getEulerAngles(new Matrix3d(matrix)));
+
+            clip.pitch.insert(tick, Math.toDegrees(euler.x));
+            clip.yaw.insert(tick, Math.toDegrees(-euler.y) - 180D);
+            clip.roll.insert(tick, Math.toDegrees(euler.z));
+        }
+    }
+
+    private IntObjectMap<IEntity> getSceneEntities()
+    {
+        UIFilmPanel panel = this.getFilmPanel();
+
+        return panel == null ? new IntObjectHashMap<>() : panel.getController().getEntities();
+    }
+
+    private UIFilmPanel getFilmPanel()
+    {
+        List<UIFilmPanel> panels = this.getContext().menu.main.getChildren(UIFilmPanel.class);
+
+        return panels.isEmpty() ? null : panels.get(0);
     }
 
     /**
