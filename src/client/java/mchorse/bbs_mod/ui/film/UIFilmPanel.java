@@ -2150,7 +2150,13 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         }
         else
         {
-            this.updateMainEditorVisibility(this.hasFilmInCurrentTab());
+    
+        if (this.undoHandler != null)
+        {
+            this.undoHandler.setActiveDomain(this.undoDomainFor(element));
+        }
+
+        this.updateMainEditorVisibility(this.hasFilmInCurrentTab());
         }
 
         this.applyTimelineViewport(element);
@@ -2261,6 +2267,24 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
     public UIFilmUndoHandler getUndoHandler()
     {
         return this.undoHandler;
+    }
+
+    /**
+     * Map a main editor panel to its undo history domain so each editor
+     * (camera/replay/actions) keeps an independent undo/redo timeline.
+     */
+    private String undoDomainFor(UIElement panel)
+    {
+        if (panel == this.replayEditor)
+        {
+            return UIFilmUndoHandler.DOMAIN_REPLAY;
+        }
+        else if (panel == this.actionEditor)
+        {
+            return UIFilmUndoHandler.DOMAIN_ACTIONS;
+        }
+
+        return UIFilmUndoHandler.DOMAIN_CAMERA;
     }
 
     public RunnerCameraController getRunner()
@@ -2657,6 +2681,7 @@ public class UIFilmPanel extends UIDataDashboardPanel<Film> implements IFlightSu
         if (data != null)
         {
             this.undoHandler = new UIFilmUndoHandler(this);
+            this.undoHandler.setActiveDomain(this.undoDomainFor(this.selectedMainEditorPanel));
 
             data.preCallback(this.undoHandler::handlePreValues);
         }

@@ -84,8 +84,21 @@ public class UIFormUndoHandler
 
     public void reset()
     {
-        this.undoManager = new UndoManager<>(100);
-        this.undoManager.setCallback(this::handleUndos);
+        this.undoManager = this.createUndoManager();
+    }
+
+    /**
+     * Create a new undo manager wired with this handler's UI state restoration
+     * callback. Subclasses that keep multiple managers (e.g. one per editor) use
+     * this so every manager shares the same {@link #handleUndos} behavior.
+     */
+    protected UndoManager<ValueGroup> createUndoManager()
+    {
+        UndoManager<ValueGroup> manager = new UndoManager<>(100);
+
+        manager.setCallback(this::handleUndos);
+
+        return manager;
     }
 
     /**

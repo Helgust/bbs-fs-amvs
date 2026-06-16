@@ -4,24 +4,85 @@ import mchorse.bbs_mod.BBSMod;
 import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.network.ClientNetwork;
 import mchorse.bbs_mod.settings.values.base.BaseValue;
+import mchorse.bbs_mod.settings.values.core.ValueGroup;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
 import mchorse.bbs_mod.ui.forms.editors.UIFormUndoHandler;
 import mchorse.bbs_mod.utils.Timer;
 import mchorse.bbs_mod.utils.clips.Clips;
+import mchorse.bbs_mod.utils.undo.UndoManager;
 
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
 public class UIFilmUndoHandler extends UIFormUndoHandler
 {
+    /** Default editor domain (camera editor is shown first). */
+    public static final String DOMAIN_CAMERA = "camera";
+    public static final String DOMAIN_REPLAY = "replay";
+    public static final String DOMAIN_ACTIONS = "actions";
+
     private Timer actionsTimer = new Timer(100);
     private Set<BaseValue> syncData = new HashSet<>();
+
+    /**
+     * One undo manager per editor (camera/replay/actions). The inherited
+     * {@link #undoManager} field always points at the active editor's manager,
+     * so all the base class machinery (submit/undo/redo/timers) operates on it
+     * without further changes.
+     */
+    private Map<String, UndoManager<ValueGroup>> domainManagers;
+    private String activeDomain = DOMAIN_CAMERA;
 
     public UIFilmUndoHandler(UIFilmPanel panel)
     {
         super(panel);
+    }
+
+    @Override
+    public void reset()
+    {
+        /* Invoked from the base constructor before this class' field initializers
+         * run, so the map must be created here rather than via a field initializer. */
+        this.domainManagers = new LinkedHashMap<>();
+        this.domainManagers.put(DOMAIN_CAMERA, this.createUndoManager());
+        this.domainManagers.put(DOMAIN_REPLAY, this.createUndoManager());
+        this.domainManagers.put(DOMAIN_ACTIONS, this.createUndoManager());
+
+        this.activeDomain = DOMAIN_CAMERA;
+        this.undoManager = this.domainManagers.get(DOMAIN_CAMERA);
+    }
+
+    public String getActiveDomain()
+    {
+        return this.activeDomain;
+    }
+
+    /**
+     * Point undo/redo at the given editor's history. Any pending edits are flushed
+     * into the currently active manager first, so changes never land in the wrong
+     * history when switching editors.
+     */
+    public void setActiveDomain(String domain)
+    {
+        if (this.domainManagers == null)
+        {
+            return;
+        }
+
+        UndoManager<ValueGroup> manager = this.domainManagers.get(domain);
+
+        if (manager == null || manager == this.undoManager)
+        {
+            return;
+        }
+
+        this.submitUndo();
+
+        this.activeDomain = domain;
+        this.undoManager = manager;
     }
 
     @Override

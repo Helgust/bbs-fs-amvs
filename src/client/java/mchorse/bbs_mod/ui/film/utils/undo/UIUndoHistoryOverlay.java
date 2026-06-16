@@ -1,8 +1,10 @@
 package mchorse.bbs_mod.ui.film.utils.undo;
 
+import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.settings.values.core.ValueGroup;
 import mchorse.bbs_mod.ui.UIKeys;
 import mchorse.bbs_mod.ui.film.UIFilmPanel;
+import mchorse.bbs_mod.ui.film.utils.UIFilmUndoHandler;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlayPanel;
 import mchorse.bbs_mod.ui.utils.UIUtils;
 import mchorse.bbs_mod.utils.undo.UndoManager;
@@ -15,7 +17,7 @@ public class UIUndoHistoryOverlay extends UIOverlayPanel
 
     public UIUndoHistoryOverlay(UIFilmPanel panel)
     {
-        super(UIKeys.FILM_HISTORY_TITLE);
+        super(titleFor(panel));
 
         this.panel = panel;
 
@@ -43,5 +45,22 @@ public class UIUndoHistoryOverlay extends UIOverlayPanel
         this.list.setIndex(this.panel.getUndoHandler().getUndoManager().getCurrentUndoIndex());
 
         this.content.add(this.list);
+    }
+
+    private static IKey titleFor(UIFilmPanel panel)
+    {
+        UIFilmUndoHandler handler = panel.getUndoHandler();
+        String domain = handler == null ? UIFilmUndoHandler.DOMAIN_CAMERA : handler.getActiveDomain();
+
+        if (UIFilmUndoHandler.DOMAIN_REPLAY.equals(domain))
+        {
+            return UIKeys.FILM_HISTORY_TITLE_REPLAY;
+        }
+        else if (UIFilmUndoHandler.DOMAIN_ACTIONS.equals(domain))
+        {
+            return UIKeys.FILM_HISTORY_TITLE_ACTIONS;
+        }
+
+        return UIKeys.FILM_HISTORY_TITLE_CAMERA;
     }
 }
