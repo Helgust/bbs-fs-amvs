@@ -63,6 +63,12 @@ public class DollyClip extends IdleClip
     }
 
     @Override
+    public boolean isTrajectory()
+    {
+        return true;
+    }
+
+    @Override
     public Clip create()
     {
         return new DollyClip();

@@ -14,6 +14,26 @@ public abstract class CameraClip extends Clip
     public void fromCamera(Camera camera)
     {}
 
+    /**
+     * Whether this clip drives the camera along a spatial trajectory that is
+     * meaningful to visualize in the world (e.g. path, dolly, keyframe clips).
+     *
+     * Static/idle, tracking and attachment clips should return {@code false}.
+     */
+    public boolean isTrajectory()
+    {
+        return false;
+    }
+
+    /**
+     * Sample this clip's position in isolation (without envelope blending) so
+     * its trajectory can be visualized. See {@link #isTrajectory()}.
+     */
+    public void sampleTrajectory(ClipContext context, Position position)
+    {
+        this.applyClip(context, position);
+    }
+
     public void applyLast(ClipContext context, Position position)
     {
         int duration = this.duration.get();
