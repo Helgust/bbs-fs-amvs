@@ -128,11 +128,15 @@ public class ActionManager
 
     public void startRecording(Film film, ServerPlayerEntity entity, int tick, int countdown, int replayId)
     {
+        /* The player plays back the other actors from the cursor tick so they stay in sync with
+         * the recording, while the recorder always records at 0-based ticks. The recorded clips
+         * are later placed onto the timeline via Clips.copyOver(clips, initialTick), which both
+         * offsets them by the cursor tick and preserves the clips before it. */
         ActionPlayer play = this.play(entity, entity.getServerWorld(), film, tick, countdown, replayId, PlayerType.RECORDING);
 
         play.stopDamage = false;
 
-        this.recorders.put(entity, new ActionRecorder(film, entity, tick, countdown));
+        this.recorders.put(entity, new ActionRecorder(film, entity, 0, countdown));
     }
 
     public void addAction(ServerPlayerEntity entity, Supplier<ActionClip> supplier)
