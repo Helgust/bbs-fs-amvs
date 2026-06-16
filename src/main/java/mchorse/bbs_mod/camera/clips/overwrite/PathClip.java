@@ -143,6 +143,12 @@ public class PathClip extends CameraClip
     }
 
     @Override
+    public boolean isTrajectory()
+    {
+        return this.size() > 1;
+    }
+
+    @Override
     public Clip create()
     {
         return new PathClip();

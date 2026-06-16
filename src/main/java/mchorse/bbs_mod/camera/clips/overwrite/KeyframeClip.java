@@ -106,6 +106,17 @@ public class KeyframeClip extends CameraClip
     }
 
     @Override
+    public boolean isTrajectory()
+    {
+        if (this.additive.get())
+        {
+            return false;
+        }
+
+        return !this.x.isEmpty() || !this.y.isEmpty() || !this.z.isEmpty() || !this.distance.isEmpty();
+    }
+
+    @Override
     public Clip create()
     {
         return new KeyframeClip();

@@ -30,6 +30,7 @@ import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.client.BBSShaders;
 import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.film.BaseFilmController;
+import mchorse.bbs_mod.film.CameraTrajectoryRenderer;
 import mchorse.bbs_mod.film.Film;
 import mchorse.bbs_mod.film.FilmControllerContext;
 import mchorse.bbs_mod.film.Recorder;
@@ -1370,6 +1371,17 @@ public class UIFilmController extends UIElement implements GizmoViewport
         }
 
         this.renderOrbitCenterMarker(context);
+
+        if (this.panel.cameraEditor.isVisible())
+        {
+            Film film = this.panel.getData();
+
+            if (film != null)
+            {
+                RenderSystem.enableDepthTest();
+                CameraTrajectoryRenderer.renderTrajectory(film.camera, this.panel.cameraEditor.getClip(), context.camera(), context.matrixStack());
+            }
+        }
 
         Mouse mouse = MinecraftClient.getInstance().mouse;
         int x = (int) mouse.getX();

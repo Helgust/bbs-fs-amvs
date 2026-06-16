@@ -126,6 +126,8 @@ public class BBSSettings {
 	public static ValueOnionSkin editorOnionSkin;
 	public static ValueBoolean editorSnapToMarkers;
 	public static ValueBoolean editorClipPreview;
+	public static ValueBoolean editorCameraTrajectory;
+	public static ValueBoolean editorCameraTrajectoryOrientation;
 	public static ValueBoolean editorRewind;
 	public static ValueBoolean editorHorizontalClipEditor;
 	public static ValueBoolean editorMinutesBackup;
@@ -555,6 +557,8 @@ public class BBSSettings {
 		builder.register(editorOnionSkin = new ValueOnionSkin("onion_skin"));
 		editorSnapToMarkers = builder.getBoolean("snap_to_markers", false);
 		editorClipPreview = builder.getBoolean("clip_preview", true);
+		editorCameraTrajectory = builder.getBoolean("camera_trajectory", true);
+		editorCameraTrajectoryOrientation = builder.getBoolean("camera_trajectory_orientation", true);
 		editorRewind = builder.getBoolean("rewind", true);
 		editorHorizontalClipEditor = builder.getBoolean("horizontal_clip_editor", true);
 		editorMinutesBackup = builder.getBoolean("minutes_backup", true);
