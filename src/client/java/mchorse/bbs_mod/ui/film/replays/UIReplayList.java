@@ -194,8 +194,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
                     menu.action(Icons.SHIFT_TO, UIKeys.SCENE_REPLAYS_CONTEXT_MOVE_TO_CATEGORY, this::openMoveToCategoryContextMenu);
                 }
 
-                menu.action(Icons.ALL_DIRECTIONS, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS, this::processReplays);
-                menu.action(Icons.TIME, UIKeys.SCENE_REPLAYS_CONTEXT_OFFSET_TIME, this::offsetTimeReplays);
+                menu.action(Icons.PROCESSOR, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESSING, this::openProcessingOverlay);
 
                 if (this.getSelectedReplays().size() > 1)
                 {
@@ -1094,7 +1093,12 @@ public class UIReplayList extends UIList<ReplayListEntry>
         return textures;
     }
 
-    private void processReplays()
+    /**
+     * Open the "add processing operation" panel (coordinate normal/advanced
+     * modes). Acts on the whole selection. {@code onApplied} runs after a
+     * successful apply so a caller (e.g. the processing overlay) can refresh.
+     */
+    public void openProcessPanel(Runnable onApplied)
     {
         Replay first = this.getSelectedReplayFirst();
 
@@ -1105,7 +1109,42 @@ public class UIReplayList extends UIList<ReplayListEntry>
 
         UIProcessReplaysPanel panel = new UIProcessReplaysPanel(first);
 
+        panel.onApply = onApplied;
+
         UIOverlay.addOverlay(this.getContext(), panel, 320, 320);
+    }
+
+    /**
+     * Open the time offset formula prompt. Applies the shift to the whole
+     * selection (recording it onto each replay's stack). {@code onApplied} runs
+     * after applying so a caller (e.g. the processing overlay) can refresh.
+     */
+    public void openOffsetPrompt(Runnable onApplied)
+    {
+        if (!this.hasReplaySelection())
+        {
+            return;
+        }
+
+        UIPromptOverlayPanel prompt = new UIPromptOverlayPanel(
+            UIKeys.SCENE_REPLAYS_CONTEXT_OFFSET_TIME_TITLE,
+            UIKeys.SCENE_REPLAYS_CONTEXT_OFFSET_TIME_DESCRIPTION,
+            (text) ->
+            {
+                LAST_OFFSET = text;
+                this.applyTimeOffset(text);
+
+                if (onApplied != null)
+                {
+                    onApplied.run();
+                }
+            }
+        );
+
+        prompt.text.setText(LAST_OFFSET);
+        prompt.text.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_OFFSET_TIME_EXPRESSION_TOOLTIP);
+
+        UIOverlay.addOverlay(this.getContext(), prompt);
     }
 
     private static List<String> collectProcessChannelIds(Replay replay)
@@ -1159,6 +1198,8 @@ public class UIReplayList extends UIList<ReplayListEntry>
         private final UINormalProcessView normal = new UINormalProcessView();
         private final UIAdvancedProcessView advanced = new UIAdvancedProcessView();
 
+        public Runnable onApply;
+
         public UIProcessReplaysPanel(Replay first)
         {
             super(UIKeys.SCENE_REPLAYS_CONTEXT_PROCESS_TITLE, IKey.EMPTY, null);
@@ -1206,6 +1247,11 @@ public class UIReplayList extends UIList<ReplayListEntry>
         {
             if (this.apply())
             {
+                if (this.onApply != null)
+                {
+                    this.onApply.run();
+                }
+
                 super.confirm();
             }
         }
@@ -1803,7 +1849,12 @@ public class UIReplayList extends UIList<ReplayListEntry>
         }
     }
 
-    private void offsetTimeReplays()
+    /**
+     * Open the unified processing window for the focused replay: its processing
+     * stack (mixed coordinate + time operations, in apply order) plus entry
+     * points to add time offsets and coordinate processing to the selection.
+     */
+    private void openProcessingOverlay()
     {
         Replay first = this.getSelectedReplayFirst();
 

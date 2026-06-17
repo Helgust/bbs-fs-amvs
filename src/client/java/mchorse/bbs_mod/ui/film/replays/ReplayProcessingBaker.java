@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -145,6 +146,10 @@ public class ReplayProcessingBaker
             restore(selected.get(i).replay, pres.get(i));
         }
 
+        /* One shared group id ties together the per-replay ops created by this
+         * single action, so stack edits can target them across the selection. */
+        String group = UUID.randomUUID().toString();
+
         for (int i = 0; i < selected.size(); i++)
         {
             ReplayProcessingOp entry = ops.get(i);
@@ -153,6 +158,8 @@ public class ReplayProcessingBaker
             {
                 continue;
             }
+
+            entry.group.set(group);
 
             Replay replay = selected.get(i).replay;
 

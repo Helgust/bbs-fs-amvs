@@ -12,25 +12,27 @@ import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.buttons.UIButton;
 import mchorse.bbs_mod.ui.framework.elements.input.list.UIList;
-import mchorse.bbs_mod.ui.framework.elements.input.text.UITextbox;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlayPanel;
+import mchorse.bbs_mod.ui.framework.elements.utils.UILabel;
 import mchorse.bbs_mod.ui.utils.UI;
 import mchorse.bbs_mod.ui.utils.icons.Icon;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.utils.colors.Colors;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Offset window for the selected replays, extended with the non-destructive
- * processing stack ({@link mchorse.bbs_mod.film.replays.ReplayProcessing}) of the
- * focused replay.
+ * Unified processing window for the selected replays. The two top buttons add
+ * operations to the whole selection: "Add time offset" opens a formula prompt
+ * (shifting keyframes, properties and actions) and "Add processing" opens the
+ * coordinate processing panel. Both record onto each replay's non-destructive
+ * {@link mchorse.bbs_mod.film.replays.ReplayProcessing} stack.
  *
- * The top input applies a time offset to the whole selection (recording it onto
- * each replay's stack). Below it the stack list shows the focused replay's
- * recorded operations with drag-reorder, enable toggle and delete, plus Flatten
- * (bake the result and drop the stack) and Clear (restore the base). Every edit
- * re-bakes the replay so the result updates live.
+ * Below them the stack list shows the focused replay's recorded operations with
+ * drag-reorder, enable toggle and delete. Bake keeps the current result and
+ * drops the recipe; Clear restores the base. Bake and Clear apply to every
+ * selected replay. Every edit re-bakes so the result updates live.
  */
 public class UIReplayProcessingOverlay extends UIOverlayPanel
 {
@@ -38,22 +40,26 @@ public class UIReplayProcessingOverlay extends UIOverlayPanel
     private final UIFilmPanel panel;
     private final Replay replay;
 
-    private final UITextbox offset;
     private final OpList list;
 
     public UIReplayProcessingOverlay(UIReplayList replays, Replay replay)
     {
-        super(UIKeys.SCENE_REPLAYS_CONTEXT_OFFSET_TIME_TITLE);
+        super(UIKeys.SCENE_REPLAYS_PROCESSING_TITLE.format(replay.getName()));
 
         this.replays = replays;
         this.panel = replays.panel;
         this.replay = replay;
 
-        this.offset = new UITextbox((t) -> UIReplayList.LAST_OFFSET = t);
-        this.offset.setText(UIReplayList.LAST_OFFSET);
-        this.offset.tooltip(UIKeys.SCENE_REPLAYS_CONTEXT_OFFSET_TIME_EXPRESSION_TOOLTIP);
+        UILabel addHeader = UI.label(UIKeys.SCENE_REPLAYS_PROCESSING_ADD_HEADER);
+        UILabel stackHeader = UI.label(UIKeys.SCENE_REPLAYS_PROCESSING_STACK_HEADER);
 
-        UIButton apply = new UIButton(UIKeys.SCENE_REPLAYS_PROCESSING_APPLY_OFFSET, (b) -> this.applyOffset());
+        UIButton offset = new UIButton(UIKeys.SCENE_REPLAYS_PROCESSING_APPLY_OFFSET, (b) -> this.addOffset());
+        offset.tooltip(UIKeys.SCENE_REPLAYS_PROCESSING_APPLY_OFFSET_TOOLTIP);
+
+        UIButton process = new UIButton(UIKeys.SCENE_REPLAYS_PROCESSING_ADD, (b) -> this.addProcessing());
+        process.tooltip(UIKeys.SCENE_REPLAYS_PROCESSING_ADD_TOOLTIP);
+
+        UIElement addRow = UI.row(offset, process);
 
         this.list = new OpList();
         this.list.sorting().background();
@@ -78,39 +84,71 @@ public class UIReplayProcessingOverlay extends UIOverlayPanel
             }
         }).inside();
 
-        UIButton flatten = new UIButton(UIKeys.SCENE_REPLAYS_PROCESSING_FLATTEN, (b) -> this.flatten());
-        flatten.tooltip(UIKeys.SCENE_REPLAYS_PROCESSING_FLATTEN_TOOLTIP);
+        UIButton bake = new UIButton(UIKeys.SCENE_REPLAYS_PROCESSING_BAKE, (b) -> this.bake());
+        bake.tooltip(UIKeys.SCENE_REPLAYS_PROCESSING_BAKE_TOOLTIP);
 
         UIButton clear = new UIButton(UIKeys.SCENE_REPLAYS_PROCESSING_CLEAR, (b) -> this.clear());
         clear.tooltip(UIKeys.SCENE_REPLAYS_PROCESSING_CLEAR_TOOLTIP);
 
-        UIElement buttons = UI.row(clear, flatten);
+        UIElement buttons = UI.row(clear, bake);
 
-        this.offset.relative(this.content).xy(6, 6).w(1F, -12).h(20);
-        apply.relative(this.content).x(6).y(30).w(1F, -12).h(20);
-        this.list.relative(this.content).x(6).y(54).w(1F, -12).h(1F, -80);
+        addHeader.relative(this.content).xy(6, 6).w(1F, -12).h(16);
+        addRow.relative(this.content).x(6).y(24).w(1F, -12).h(20);
+        stackHeader.relative(this.content).xy(6, 50).w(1F, -12).h(16);
+        this.list.relative(this.content).x(6).y(68).w(1F, -12).h(1F, -94);
         buttons.relative(this.content).x(6).y(1F, -26).w(1F, -12).h(20);
 
-        this.content.add(this.offset, apply, this.list, buttons);
+        this.content.add(addHeader, addRow, stackHeader, this.list, buttons);
 
         this.refresh();
     }
 
-    private void applyOffset()
+    private void addOffset()
     {
-        this.replays.applyTimeOffset(this.offset.getText());
-        this.refresh();
+        this.replays.openOffsetPrompt(this::afterChange);
+    }
+
+    private void addProcessing()
+    {
+        this.replays.openProcessPanel(this::afterChange);
     }
 
     private void toggle(ReplayProcessingOp op)
     {
         Film film = this.panel.getData();
+        String group = op.group.get();
+        boolean value = !op.enabled.get();
 
-        BaseValue.edit(this.replay, IValueListener.FLAG_UNMERGEABLE, (r) ->
+        if (group == null || group.isEmpty())
         {
-            op.enabled.set(!op.enabled.get());
-            ReplayProcessingBaker.rebake(film, r);
-        });
+            BaseValue.edit(this.replay, IValueListener.FLAG_UNMERGEABLE, (r) ->
+            {
+                op.enabled.set(value);
+                ReplayProcessingBaker.rebake(film, r);
+            });
+        }
+        else
+        {
+            for (Replay r : this.selectedReplays())
+            {
+                List<ReplayProcessingOp> matches = matchingOps(r, group);
+
+                if (matches.isEmpty())
+                {
+                    continue;
+                }
+
+                BaseValue.edit(r, IValueListener.FLAG_UNMERGEABLE, (rr) ->
+                {
+                    for (ReplayProcessingOp m : matches)
+                    {
+                        m.enabled.set(value);
+                    }
+
+                    ReplayProcessingBaker.rebake(film, rr);
+                });
+            }
+        }
 
         this.afterChange();
     }
@@ -118,30 +156,92 @@ public class UIReplayProcessingOverlay extends UIOverlayPanel
     private void delete(ReplayProcessingOp op)
     {
         Film film = this.panel.getData();
+        String group = op.group.get();
 
-        BaseValue.edit(this.replay, IValueListener.FLAG_UNMERGEABLE, (r) ->
+        if (group == null || group.isEmpty())
         {
-            r.processing.remove(op);
-            ReplayProcessingBaker.rebake(film, r);
-        });
+            BaseValue.edit(this.replay, IValueListener.FLAG_UNMERGEABLE, (r) ->
+            {
+                r.processing.remove(op);
+                ReplayProcessingBaker.rebake(film, r);
+            });
+        }
+        else
+        {
+            for (Replay r : this.selectedReplays())
+            {
+                List<ReplayProcessingOp> matches = matchingOps(r, group);
+
+                if (matches.isEmpty())
+                {
+                    continue;
+                }
+
+                BaseValue.edit(r, IValueListener.FLAG_UNMERGEABLE, (rr) ->
+                {
+                    for (ReplayProcessingOp m : matches)
+                    {
+                        rr.processing.remove(m);
+                    }
+
+                    ReplayProcessingBaker.rebake(film, rr);
+                });
+            }
+        }
 
         this.afterChange();
     }
 
-    private void flatten()
+    /**
+     * The ops in {@code replay}'s stack that belong to the given group (the ops
+     * created together with the focused op across the multi-selection).
+     */
+    private static List<ReplayProcessingOp> matchingOps(Replay replay, String group)
     {
-        BaseValue.edit(this.replay, IValueListener.FLAG_UNMERGEABLE, (r) -> r.processing.flatten());
+        List<ReplayProcessingOp> out = new ArrayList<>();
+
+        for (ReplayProcessingOp op : replay.processing.getOps())
+        {
+            if (group.equals(op.group.get()))
+            {
+                out.add(op);
+            }
+        }
+
+        return out;
+    }
+
+    /**
+     * Keep the baked result and drop the recipe, for every selected replay.
+     */
+    private void bake()
+    {
+        for (Replay r : this.selectedReplays())
+        {
+            BaseValue.edit(r, IValueListener.FLAG_UNMERGEABLE, (rr) -> rr.processing.flatten());
+        }
 
         this.afterChange();
     }
 
+    /**
+     * Restore the base and drop the recipe, for every selected replay.
+     */
     private void clear()
     {
-        Film film = this.panel.getData();
-
-        BaseValue.edit(this.replay, IValueListener.FLAG_UNMERGEABLE, (r) -> r.processing.clear(r));
+        for (Replay r : this.selectedReplays())
+        {
+            BaseValue.edit(r, IValueListener.FLAG_UNMERGEABLE, (rr) -> rr.processing.clear(rr));
+        }
 
         this.afterChange();
+    }
+
+    private List<Replay> selectedReplays()
+    {
+        List<Replay> selected = this.replays.getSelectedReplays();
+
+        return selected.isEmpty() ? List.of(this.replay) : selected;
     }
 
     private void afterChange()
