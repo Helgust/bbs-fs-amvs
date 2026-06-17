@@ -49,6 +49,7 @@ import mchorse.bbs_mod.events.EventBus;
 import mchorse.bbs_mod.events.register.RegisterSettingsEvent;
 import mchorse.bbs_mod.events.register.RegisterSourcePacksEvent;
 import mchorse.bbs_mod.film.FilmManager;
+import mchorse.bbs_mod.film.replays.ReplayManager;
 import mchorse.bbs_mod.forms.FormArchitect;
 import mchorse.bbs_mod.forms.forms.AnchorForm;
 import mchorse.bbs_mod.forms.forms.BillboardForm;
@@ -144,6 +145,7 @@ public class BBSMod implements ModInitializer
 
     /* Data */
     private static FilmManager films;
+    private static ReplayManager replays;
 
     private static List<Runnable> runnables = new ArrayList<>();
 
@@ -360,6 +362,11 @@ public class BBSMod implements ModInitializer
         return films;
     }
 
+    public static ReplayManager getReplays()
+    {
+        return replays;
+    }
+
     public static MapFactory<Clip, ClipFactoryData> getFactoryCameraClips()
     {
         return factoryCameraClips;
@@ -415,6 +422,7 @@ public class BBSMod implements ModInitializer
             .register(Link.bbs("structure"), StructureForm.class, null);
 
         films = new FilmManager(() -> new File(worldFolder, "bbs/films"));
+        replays = new ReplayManager(() -> getGamePath("config/bbs/replays"));
 
         /* Register camera clips */
         factoryCameraClips = new MapFactory<Clip, ClipFactoryData>()
