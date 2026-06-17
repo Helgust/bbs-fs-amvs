@@ -34,6 +34,14 @@ public class ReplayProcessingOp extends ValueGroup
     public final ValueString type = new ValueString("type", TYPE_DELTA);
     public final ValueString label = new ValueString("label", "");
 
+    /**
+     * Shared id for all per-replay ops created together by one process/offset
+     * action across a multi-selection. Lets stack edits (delete/toggle) target
+     * "the same operation" in every selected replay's separate stack. Empty for
+     * legacy/imported ops, which then fall back to focused-replay-only edits.
+     */
+    public final ValueString group = new ValueString("group", "");
+
     /* TYPE_DELTA */
     public final ValueFloat tickShift = new ValueFloat("tick_shift", 0F);
     public final ValueDoubleMap deltas = new ValueDoubleMap("deltas");
@@ -59,6 +67,7 @@ public class ReplayProcessingOp extends ValueGroup
         this.add(this.enabled);
         this.add(this.type);
         this.add(this.label);
+        this.add(this.group);
 
         this.add(this.tickShift);
         this.add(this.deltas);
