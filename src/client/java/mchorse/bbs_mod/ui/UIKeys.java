@@ -777,10 +777,16 @@ public class UIKeys
     public static final IKey SCENE_REPLAYS_CONTEXT_DUPE = L10n.lang("bbs.ui.scene.replays.context.dupe");
     public static final IKey SCENE_REPLAYS_CONTEXT_DUPE_DESCRIPTION = L10n.lang("bbs.ui.scene.replays.context.dupe-description");
     public static final IKey SCENE_REPLAYS_CONTEXT_EDIT_FORM = L10n.lang("bbs.ui.scene.replays.context.edit_form");
+    public static final IKey SCENE_REPLAYS_CONTEXT_EXPORT = L10n.lang("bbs.ui.scene.replays.context.export");
+    public static final IKey SCENE_REPLAYS_CONTEXT_EXPORT_TITLE = L10n.lang("bbs.ui.scene.replays.context.export-title");
+    public static final IKey SCENE_REPLAYS_CONTEXT_EXPORT_DESCRIPTION = L10n.lang("bbs.ui.scene.replays.context.export-description");
     public static final IKey SCENE_REPLAYS_CONTEXT_FROM_CAMERA = L10n.lang("bbs.ui.scene.replays.context.from_camera");
     public static final IKey SCENE_REPLAYS_CONTEXT_FROM_MODEL_BLOCK = L10n.lang("bbs.ui.scene.replays.context.from_model_block");
     public static final IKey SCENE_REPLAYS_CONTEXT_FROM_MODEL_BLOCK_DESCRIPTION = L10n.lang("bbs.ui.scene.replays.context.from_model_block-description");
     public static final IKey SCENE_REPLAYS_CONTEXT_FROM_MODEL_BLOCK_TITLE = L10n.lang("bbs.ui.scene.replays.context.from_model_block-title");
+    public static final IKey SCENE_REPLAYS_CONTEXT_IMPORT = L10n.lang("bbs.ui.scene.replays.context.import");
+    public static final IKey SCENE_REPLAYS_CONTEXT_IMPORT_TITLE = L10n.lang("bbs.ui.scene.replays.context.import-title");
+    public static final IKey SCENE_REPLAYS_CONTEXT_IMPORT_DESCRIPTION = L10n.lang("bbs.ui.scene.replays.context.import-description");
     public static final IKey SCENE_REPLAYS_CONTEXT_OFFSET_TIME = L10n.lang("bbs.ui.scene.replays.context.offset_time");
     public static final IKey SCENE_REPLAYS_PROCESSING_APPLY_OFFSET = L10n.lang("bbs.ui.scene.replays.processing.apply_offset");
     public static final IKey SCENE_REPLAYS_PROCESSING_TOGGLE = L10n.lang("bbs.ui.scene.replays.processing.toggle");

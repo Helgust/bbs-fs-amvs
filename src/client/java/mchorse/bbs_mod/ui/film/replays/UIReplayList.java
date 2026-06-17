@@ -53,6 +53,7 @@ import mchorse.bbs_mod.ui.framework.elements.overlay.UIConfirmOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIFolderOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UINumberOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay;
+import mchorse.bbs_mod.ui.framework.elements.overlay.UIPromptOverlayPanel;
 import mchorse.bbs_mod.ui.framework.elements.utils.UILabel;
 import mchorse.bbs_mod.ui.framework.elements.utils.UIText;
 import mchorse.bbs_mod.ui.utils.Label;
@@ -156,6 +157,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
             if (this.hasReplaySelection())
             {
                 menu.action(Icons.COPY, UIKeys.SCENE_REPLAYS_CONTEXT_COPY, this::copyReplay);
+                menu.action(Icons.UPLOAD, UIKeys.SCENE_REPLAYS_CONTEXT_EXPORT, this::exportReplay);
             }
 
             MapType copyReplay = Window.getClipboardMap("_CopyReplay");
@@ -176,6 +178,11 @@ public class UIReplayList extends UIList<ReplayListEntry>
             }
 
             menu.action(Icons.BLOCK, UIKeys.SCENE_REPLAYS_CONTEXT_FROM_MODEL_BLOCK, this::fromModelBlock);
+
+            if (film != null && !BBSMod.getReplays().getKeys().isEmpty())
+            {
+                menu.action(Icons.DOWNLOAD, UIKeys.SCENE_REPLAYS_CONTEXT_IMPORT, this::importReplay);
+            }
 
             if (this.hasReplaySelection())
             {
@@ -1936,6 +1943,142 @@ public class UIReplayList extends UIList<ReplayListEntry>
             this.scrollToReplay(last);
             this.updateFilmEditor();
         }
+    }
+
+    public void exportReplay()
+    {
+        List<Replay> selected = this.getSelectedReplays();
+
+        if (selected.isEmpty())
+        {
+            return;
+        }
+
+        UIPromptOverlayPanel prompt = new UIPromptOverlayPanel(
+            UIKeys.SCENE_REPLAYS_CONTEXT_EXPORT_TITLE,
+            UIKeys.SCENE_REPLAYS_CONTEXT_EXPORT_DESCRIPTION,
+            (name) -> this.exportReplays(selected, name)
+        );
+
+        prompt.text.setText(selected.get(0).getName());
+
+        UIOverlay.addOverlay(this.getContext(), prompt);
+    }
+
+    private void exportReplays(List<Replay> replays, String baseName)
+    {
+        baseName = baseName == null ? "" : baseName.trim();
+
+        if (baseName.isEmpty())
+        {
+            return;
+        }
+
+        for (int i = 0; i < replays.size(); i++)
+        {
+            String id = replays.size() > 1 ? baseName + "_" + (i + 1) : baseName;
+
+            BBSMod.getReplays().save(id, (MapType) replays.get(i).toData());
+        }
+    }
+
+    public void importReplay()
+    {
+        List<String> keys = new ArrayList<>();
+
+        for (String key : BBSMod.getReplays().getKeys())
+        {
+            if (!key.endsWith("/"))
+            {
+                keys.add(key);
+            }
+        }
+
+        keys.sort(Comparator.naturalOrder());
+
+        UISearchList<String> search = new UISearchList<>(new UIStringList(null));
+        UIList<String> list = search.list;
+        UIConfirmOverlayPanel panel = new UIConfirmOverlayPanel(UIKeys.SCENE_REPLAYS_CONTEXT_IMPORT_TITLE, UIKeys.SCENE_REPLAYS_CONTEXT_IMPORT_DESCRIPTION, (b) ->
+        {
+            if (b)
+            {
+                String id = list.getCurrentFirst();
+
+                if (id != null)
+                {
+                    this.importReplay(id);
+                }
+            }
+        });
+
+        for (String key : keys)
+        {
+            list.add(key);
+        }
+
+        list.background();
+        search.relative(panel.confirm).y(-5).w(1F).h(16 * 9 + 20).anchor(0F, 1F);
+
+        panel.confirm.w(1F, -10);
+        panel.content.add(search);
+
+        UIOverlay.addOverlay(this.getContext(), panel, 240, 300);
+    }
+
+    /**
+     * Import a library replay as a new replay placed where the camera is looking. Everything is baked
+     * into the new replay's keyframes: the source's processing/offset recipe is flattened (baked
+     * keyframes kept, recipe dropped) and the position keyframes are shifted so the first frame lands at
+     * the cursor. The result is a clean, self-contained replay that transfers across worlds and films.
+     * The recipe wouldn't transfer meaningfully anyway (formation indices, look-at targets and terrain
+     * fitting are all relative to the source film/world).
+     */
+    private void importReplay(String id)
+    {
+        Replay loaded = BBSMod.getReplays().load(id);
+
+        if (loaded == null)
+        {
+            return;
+        }
+
+        loaded.processing.flatten();
+        this.anchorReplayToCursor(loaded);
+
+        MapType wrapper = new MapType();
+        ListType replays = new ListType();
+
+        replays.add(loaded.toData());
+        wrapper.put("replays", replays);
+
+        this.pasteReplay(wrapper);
+    }
+
+    /**
+     * Make an imported (potentially world-foreign) replay world-agnostic by shifting its position
+     * keyframes so the first frame lands where the camera is looking. The whole trajectory's shape is
+     * preserved (every position keyframe gets the same delta), so cross-world/film transfer just works.
+     */
+    private void anchorReplayToCursor(Replay replay)
+    {
+        World world = MinecraftClient.getInstance().world;
+        Camera camera = this.panel.getCamera();
+        BlockHitResult hit = RayTracing.rayTrace(world, camera, 64F);
+        Vec3d p = hit.getPos();
+        Vector3d target = new Vector3d(p.x, p.y, p.z);
+
+        if (hit.getType() == HitResult.Type.MISS)
+        {
+            target.set(camera.getLookDirection()).mul(5F).add(camera.position);
+        }
+
+        double ox = replay.keyframes.x.interpolate(0F);
+        double oy = replay.keyframes.y.interpolate(0F);
+        double oz = replay.keyframes.z.interpolate(0F);
+
+        ReplayBatchProcessor.applyDelta(replay, "x", target.x - ox);
+        ReplayBatchProcessor.applyDelta(replay, "y", target.y - oy);
+        ReplayBatchProcessor.applyDelta(replay, "z", target.z - oz);
     }
 
     public void openFormEditor(ValueForm form, boolean editing, Consumer<Form> consumer)
