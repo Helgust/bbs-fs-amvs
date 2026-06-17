@@ -43,18 +43,8 @@ public class CameraTrajectoryRenderer
     /** Roughly how many look-direction cues to spread along the trajectory. */
     private static final int CUE_COUNT = 14;
 
-    /**
-     * Half-width of the ribbon per block of distance from the camera (keeps the
-     * line a roughly constant thickness on screen), with sane world-space bounds.
-     */
-    private static final float LINE_SCREEN_SCALE = 0.006F;
-    private static final float LINE_MIN_HALF = 0.02F;
-    private static final float LINE_MAX_HALF = 0.4F;
-
-    /** Cues use a slightly thicker screen-scaled width than the line. */
-    private static final float CUE_SCREEN_SCALE = 0.009F;
-    private static final float CUE_MIN_HALF = 0.03F;
-    private static final float CUE_MAX_HALF = 0.5F;
+    /** Cues are rendered slightly thicker than the line, and point this far. */
+    private static final float CUE_WIDTH_FACTOR = 1.5F;
     private static final float CUE_LENGTH = 0.5F;
 
     public static void renderTrajectory(Clips clips, Clip selected, Camera camera, MatrixStack stack)
@@ -88,6 +78,9 @@ public class CameraTrajectoryRenderer
 
         boolean orientation = BBSSettings.editorCameraTrajectoryOrientation.get();
 
+        float lineHalf = Math.max(0F, BBSSettings.editorCameraTrajectoryWidth.get()) * 0.5F;
+        float cueHalf = lineHalf * CUE_WIDTH_FACTOR;
+
         BufferBuilder builder = Tessellator.getInstance().getBuffer();
 
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
@@ -95,7 +88,7 @@ public class CameraTrajectoryRenderer
         builder.begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
 
         /* Position-only trajectory line, as a smooth camera-facing ribbon */
-        renderRibbon(builder, stack, samples, cx, cy, cz, r, g, b);
+        renderRibbon(builder, stack, samples, cx, cy, cz, r, g, b, lineHalf);
 
         /* Look-direction cues, anchored on the line in a contrasting color */
         if (orientation)
@@ -120,10 +113,7 @@ public class CameraTrajectoryRenderer
                 float by = ay + forward.y * CUE_LENGTH;
                 float bz = az + forward.z * CUE_LENGTH;
 
-                float dist = (float) Math.sqrt(ax * ax + ay * ay + az * az);
-                float half = MathUtils.clamp(dist * CUE_SCREEN_SCALE, CUE_MIN_HALF, CUE_MAX_HALF);
-
-                drawRibbonSegment(builder, matrix, ax, ay, az, bx, by, bz, half, cr, cg, cb);
+                drawRibbonSegment(builder, matrix, ax, ay, az, bx, by, bz, cueHalf, cr, cg, cb);
             }
         }
 
@@ -136,9 +126,10 @@ public class CameraTrajectoryRenderer
     /**
      * Builds a camera-facing ribbon through the sampled points. For each point
      * the ribbon is offset sideways along {@code tangent x view}, so the strip
-     * always faces the camera and keeps a roughly constant width on screen.
+     * always faces the camera. The {@code half} width is a constant world-space
+     * size, so the line gets thinner with distance like normal geometry.
      */
-    private static void renderRibbon(BufferBuilder builder, MatrixStack stack, List<Position> samples, double cx, double cy, double cz, float r, float g, float b)
+    private static void renderRibbon(BufferBuilder builder, MatrixStack stack, List<Position> samples, double cx, double cy, double cz, float r, float g, float b, float half)
     {
         int n = samples.size();
 
@@ -181,14 +172,11 @@ public class CameraTrajectoryRenderer
             if (dist < 1.0E-4F)
             {
                 view.set(0F, 0F, 1F);
-                dist = 1F;
             }
             else
             {
                 view.div(dist);
             }
-
-            float half = MathUtils.clamp(dist * LINE_SCREEN_SCALE, LINE_MIN_HALF, LINE_MAX_HALF);
 
             tangent.cross(view, side);
 
