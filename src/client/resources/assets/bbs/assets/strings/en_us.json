@@ -127,6 +127,8 @@
 	"bbs.config.editor.camera_trajectory-comment": "When enabled, shows the position-only trajectory line of the selected path, dolly or keyframe camera clip in the film editor",
 	"bbs.config.editor.camera_trajectory_orientation": "Trajectory orientation cues",
 	"bbs.config.editor.camera_trajectory_orientation-comment": "When enabled (and 'Camera trajectory' is on), draws look-direction cues anchored on the trajectory line in a contrasting color",
+	"bbs.config.editor.camera_trajectory_width": "Trajectory line width",
+	"bbs.config.editor.camera_trajectory_width-comment": "Width (in blocks) of the camera trajectory line and its orientation cues. The line has a constant world-space size, so it gets thinner with distance like normal geometry",
 	"bbs.config.editor.center_lines": "Center lines",
 	"bbs.config.editor.center_lines-comment": "Center lines",
 	"bbs.config.editor.clip_preview": "Clip preview",

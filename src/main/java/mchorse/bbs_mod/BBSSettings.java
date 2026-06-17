@@ -128,6 +128,7 @@ public class BBSSettings {
 	public static ValueBoolean editorClipPreview;
 	public static ValueBoolean editorCameraTrajectory;
 	public static ValueBoolean editorCameraTrajectoryOrientation;
+	public static ValueFloat editorCameraTrajectoryWidth;
 	public static ValueBoolean editorRewind;
 	public static ValueBoolean editorHorizontalClipEditor;
 	public static ValueBoolean editorMinutesBackup;
@@ -559,6 +560,7 @@ public class BBSSettings {
 		editorClipPreview = builder.getBoolean("clip_preview", true);
 		editorCameraTrajectory = builder.getBoolean("camera_trajectory", true);
 		editorCameraTrajectoryOrientation = builder.getBoolean("camera_trajectory_orientation", true);
+		editorCameraTrajectoryWidth = builder.getFloat("camera_trajectory_width", 0.1F, 0.01F, 2F);
 		editorRewind = builder.getBoolean("rewind", true);
 		editorHorizontalClipEditor = builder.getBoolean("horizontal_clip_editor", true);
 		editorMinutesBackup = builder.getBoolean("minutes_backup", true);
