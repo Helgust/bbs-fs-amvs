@@ -421,6 +421,25 @@ public class UIClips extends UIElement
         this.pickClip(clip);
     }
 
+    /**
+     * Add a clip created from a player recording. Unlike the normal add flow
+     * (which pre-checks the drop zone via {@link #checkSize}), the tick and layer
+     * here come straight from the mouse, so the clip can land on top of an
+     * existing clip on the same layer. Overlapping clips on a single layer break
+     * camera compositing (and can crash), so bump the clip up to the nearest free
+     * layer - the same thing pasting clips does via {@link Clips#findFreeLayer}.
+     */
+    private void addReplayClip(Clip clip, int tick, int layer, int duration)
+    {
+        clip.tick.set(Math.max(0, tick));
+        clip.duration.set(duration);
+        clip.layer.set(Math.max(0, layer));
+        clip.layer.set(this.clips.findFreeLayer(clip));
+
+        this.clips.addClip(clip);
+        this.pickClip(clip);
+    }
+
     private MapType copyClips()
     {
         MapType data = new MapType();
@@ -703,7 +722,7 @@ public class UIClips extends UIElement
             )
         );
 
-        this.addClip(clip, this.fromGraphX(mouseX), this.fromLayerY(mouseY), (int) size);
+        this.addReplayClip(clip, this.fromGraphX(mouseX), this.fromLayerY(mouseY), (int) size);
     }
 
     /**
@@ -775,7 +794,16 @@ public class UIClips extends UIElement
                 matrix = total.a;
             }
 
-            matrix.mul(map.get(bone).matrix());
+            Matrix4f boneMatrix = map.get(bone).matrix();
+
+            /* has(bone) only guarantees the entry exists; its matrix can still be
+             * null (MatrixCache returns an empty entry), so skip this tick then. */
+            if (boneMatrix == null)
+            {
+                continue;
+            }
+
+            matrix.mul(boneMatrix);
 
             /* Position from the bone's world translation */
             matrix.getTranslation(position);
