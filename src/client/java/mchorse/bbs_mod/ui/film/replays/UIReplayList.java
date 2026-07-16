@@ -2190,7 +2190,10 @@ public class UIReplayList extends UIList<ReplayListEntry>
             }
         });
 
-        palette.updatable();
+        if (palette != null)
+        {
+            palette.updatable();
+        }
     }
 
     public void addReplay()

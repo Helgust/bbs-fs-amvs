@@ -1,5 +1,7 @@
 package mchorse.bbs_mod.ui.forms.editors;
 
+import com.mojang.logging.LogUtils;
+import org.slf4j.Logger;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.data.types.MapType;
 import mchorse.bbs_mod.forms.FormUtils;
@@ -82,6 +84,8 @@ import java.util.function.Supplier;
 
 public class UIFormEditor extends UIElement implements IUIFormList, ICursor
 {
+    private static final Logger LOGGER = LogUtils.getLogger();
+
     private static Map<Class, Supplier<UIForm>> panels = new HashMap<>();
 
     private static float treeWidth = 0.1F;
@@ -703,7 +707,9 @@ public class UIFormEditor extends UIElement implements IUIFormList, ICursor
 
     public boolean isEditing()
     {
-        return this.form != null;
+        /* The form/editor pair is the editing invariant - require both so a desync (undo across a
+         * form-type switch, a failed switchEditor) can't report "editing" with a half-torn state. */
+        return this.form != null && this.editor != null;
     }
 
     public boolean edit(Form form)
@@ -812,6 +818,15 @@ public class UIFormEditor extends UIElement implements IUIFormList, ICursor
 
     public Form finish()
     {
+        if (this.editor == null || this.form == null)
+        {
+            /* Guards a form/editor desync: finishing with one of them null would NPE mid-dispatch and
+             * permanently corrupt the shared dashboard tree. */
+            LOGGER.warn("[BBS] UIFormEditor.finish() called with editor={} form={}; ignoring.", this.editor, this.form);
+
+            return this.form;
+        }
+
         Form form = this.form;
 
         this.form.setId("");

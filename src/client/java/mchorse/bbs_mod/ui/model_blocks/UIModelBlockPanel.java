@@ -135,6 +135,14 @@ public class UIModelBlockPanel extends UIDashboardPanel implements IFlightSuppor
                 }
             });
 
+            /* open() returns null when a palette is already open (e.g. a fast double-click) or the
+             * panel is detached. Bail before wiring anything up - otherwise we NPE and, worse, hide
+             * the scroll view with no palette to restore it. */
+            if (palette == null)
+            {
+                return;
+            }
+
             palette.immersive();
             palette.editor.keys().register(Keys.MODEL_BLOCKS_TOGGLE_RENDERING, () -> toggleRendering = !toggleRendering);
             palette.editor.renderer.full(dashboard.getRoot());

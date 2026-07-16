@@ -5,6 +5,7 @@ import mchorse.bbs_mod.ui.Keys;
 import mchorse.bbs_mod.ui.framework.elements.IUIElement;
 import mchorse.bbs_mod.ui.framework.elements.IViewport;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
+import mchorse.bbs_mod.ui.framework.elements.overlay.UIOverlay;
 import mchorse.bbs_mod.ui.framework.elements.utils.IViewportStack;
 import mchorse.bbs_mod.ui.utils.Area;
 import mchorse.bbs_mod.ui.utils.Gizmo;
@@ -195,9 +196,22 @@ public abstract class UIBaseMenu
 
         this.context.setKeyEvent(key, scanCode, action);
 
-        IUIElement element = this.root.keyPressed(this.context);
+        boolean enabled = this.root.isEnabled();
 
-        if (this.root.isEnabled() && element != null)
+        /* ESC is routed centrally before the generic tree walk: close exactly one thing, innermost
+         * first (focus -> context menu -> topmost overlay), and only fall through to the tree (which
+         * lets the form palette / editor / keyframes cancel their own gestures) when none of those
+         * apply. This kills the "focus stranded under a BLOCKing overlay" dead-ESC deadlock and stops
+         * a dropped link in the old decentral chain from nuking the whole dashboard. */
+        if (enabled && this.context.isPressed(GLFW.GLFW_KEY_ESCAPE) && this.handleEscape())
+        {
+            return true;
+        }
+
+        /* Only dispatch (and honour side effects) into an enabled root. */
+        IUIElement element = enabled ? this.root.keyPressed(this.context) : null;
+
+        if (element != null)
         {
             return true;
         }
@@ -210,6 +224,77 @@ public abstract class UIBaseMenu
         }
 
         return false;
+    }
+
+    /**
+     * Central ESC "close topmost" pass. Returns true when it consumed the press (so the tree walk and
+     * the close-dashboard fallback are skipped). Returns false to let the tree handle ESC itself
+     * (form palette exit-editor / close, keyframe cancel, etc.).
+     */
+    private boolean handleEscape()
+    {
+        UIOverlay overlay = this.getTopmostOverlay();
+
+        /* 1. A focused element: unfocus it. If the focus is stranded *outside* the topmost overlay
+         * (the deadlock case - the overlay BLOCKs keys so it can never be reached or closed), also
+         * proceed to close that overlay in the same press. Focus inside the overlay just unfocuses. */
+        if (this.context.isFocused())
+        {
+            boolean insideOverlay = overlay != null && this.isFocusInside(overlay);
+
+            this.context.unfocus();
+
+            if (overlay == null || insideOverlay)
+            {
+                return true;
+            }
+        }
+
+        /* 2. Context menu (sits above overlays). */
+        if (this.context.hasContextMenu())
+        {
+            this.context.closeContextMenu();
+
+            return true;
+        }
+
+        /* 3. Topmost overlay. */
+        if (overlay != null)
+        {
+            overlay.closeItself();
+
+            return true;
+        }
+
+        /* 4. Nothing modal to close - let the tree walk handle ESC. */
+        return false;
+    }
+
+    private UIOverlay getTopmostOverlay()
+    {
+        java.util.List<IUIElement> children = this.overlay.getChildren();
+
+        for (int i = children.size() - 1; i >= 0; i--)
+        {
+            if (children.get(i) instanceof UIOverlay)
+            {
+                return (UIOverlay) children.get(i);
+            }
+        }
+
+        return null;
+    }
+
+    private boolean isFocusInside(UIOverlay overlay)
+    {
+        if (!(this.context.activeElement instanceof UIElement))
+        {
+            return false;
+        }
+
+        UIElement focused = (UIElement) this.context.activeElement;
+
+        return overlay == focused || overlay.isDescendant(focused);
     }
 
     public void handleTextInput(int key)

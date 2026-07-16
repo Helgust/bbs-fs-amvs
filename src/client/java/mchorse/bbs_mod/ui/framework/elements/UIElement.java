@@ -399,6 +399,22 @@ public class UIElement implements IUIElement, IUndoElement
 
     protected void onRemove(UIElement parent)
     {
+        /* Clear focus synchronously when the focused element leaves the tree. Otherwise the stale
+         * activeElement survives until the next render frame (UIContext.resetTooltip), and a second
+         * input event in the same tick (a double-ESC) routes against dead focus - blocking overlay
+         * close and re-arming the ESC deadlock. */
+        UIContext context = this.getContext();
+
+        if (context != null && context.activeElement instanceof UIElement)
+        {
+            UIElement focused = (UIElement) context.activeElement;
+
+            if (focused == this || this.isDescendant(focused))
+            {
+                context.unfocus();
+            }
+        }
+
         this.events.emit(new UIRemovedEvent(this));
 
         for (IUITreeEventListener listener : this.getChildren(IUITreeEventListener.class))
@@ -1199,14 +1215,15 @@ public class UIElement implements IUIElement, IUndoElement
 
     protected IUIElement childrenMouseClicked(UIContext context)
     {
-        for (int i = this.children.size() - 1; i >= 0; i--)
-        {
-            if (i >= this.children.size())
-            {
-                continue;
-            }
+        /* Iterate a snapshot: handlers routinely mutate this.children mid-walk (overlay close, palette
+         * exit, list rebuilds). Indexing the live list skipped or double-visited siblings when a
+         * removal shifted indices below the cursor. Children lists are small - allocation is fine at
+         * input-event rate. */
+        List<IUIElement> children = new ArrayList<>(this.children);
 
-            IUIElement element = this.children.get(i);
+        for (int i = children.size() - 1; i >= 0; i--)
+        {
+            IUIElement element = children.get(i);
 
             if (element.isEnabled())
             {
@@ -1224,14 +1241,11 @@ public class UIElement implements IUIElement, IUndoElement
 
     protected IUIElement childrenMouseScrolled(UIContext context)
     {
-        for (int i = this.children.size() - 1; i >= 0; i--)
-        {
-            if (i >= this.children.size())
-            {
-                continue;
-            }
+        List<IUIElement> children = new ArrayList<>(this.children);
 
-            IUIElement element = this.children.get(i);
+        for (int i = children.size() - 1; i >= 0; i--)
+        {
+            IUIElement element = children.get(i);
 
             if (element.isEnabled())
             {
@@ -1249,14 +1263,11 @@ public class UIElement implements IUIElement, IUndoElement
 
     protected IUIElement childrenMouseReleased(UIContext context)
     {
-        for (int i = this.children.size() - 1; i >= 0; i--)
-        {
-            if (i >= this.children.size())
-            {
-                continue;
-            }
+        List<IUIElement> children = new ArrayList<>(this.children);
 
-            IUIElement element = this.children.get(i);
+        for (int i = children.size() - 1; i >= 0; i--)
+        {
+            IUIElement element = children.get(i);
 
             if (element.isEnabled())
             {
@@ -1274,14 +1285,11 @@ public class UIElement implements IUIElement, IUndoElement
 
     protected IUIElement childrenKeyPressed(UIContext context)
     {
-        for (int i = this.children.size() - 1; i >= 0; i--)
-        {
-            if (i >= this.children.size())
-            {
-                continue;
-            }
+        List<IUIElement> children = new ArrayList<>(this.children);
 
-            IUIElement element = this.children.get(i);
+        for (int i = children.size() - 1; i >= 0; i--)
+        {
+            IUIElement element = children.get(i);
 
             if (element.isEnabled())
             {
@@ -1299,14 +1307,11 @@ public class UIElement implements IUIElement, IUndoElement
 
     protected IUIElement childrenTextInput(UIContext context)
     {
-        for (int i = this.children.size() - 1; i >= 0; i--)
-        {
-            if (i >= this.children.size())
-            {
-                continue;
-            }
+        List<IUIElement> children = new ArrayList<>(this.children);
 
-            IUIElement element = this.children.get(i);
+        for (int i = children.size() - 1; i >= 0; i--)
+        {
+            IUIElement element = children.get(i);
 
             if (element.isEnabled())
             {

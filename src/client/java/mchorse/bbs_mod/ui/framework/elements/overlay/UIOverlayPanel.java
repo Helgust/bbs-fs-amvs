@@ -103,9 +103,9 @@ public class UIOverlayPanel extends UIElement
     @Override
     public boolean subMouseReleased(UIContext context)
     {
-        this.moving = super.subMouseReleased(context);
+        this.moving = false;
 
-        return false;
+        return super.subMouseReleased(context);
     }
 
     @Override

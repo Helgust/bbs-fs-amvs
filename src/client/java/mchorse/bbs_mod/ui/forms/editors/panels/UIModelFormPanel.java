@@ -56,7 +56,10 @@ public class UIModelFormPanel extends UIFormPanel<ModelForm>
                     }
                 }
 
-                this.editor.startEdit(this.form);
+                /* Keep this (model) tab active across the rebuild instead of resetting to the default
+                 * panel - clicking through models in the picker otherwise stomps the user's tab and
+                 * pose-editor selection on every click. */
+                this.editor.startEdit(this.form, this.getClass());
             });
 
             list.addValues(BBSModClient.getModels().getAvailableKeys());

@@ -1,5 +1,6 @@
 package mchorse.bbs_mod.ui.forms;
 
+import mchorse.bbs_mod.forms.categories.FormCategory;
 import mchorse.bbs_mod.forms.forms.Form;
 import mchorse.bbs_mod.ui.Keys;
 import mchorse.bbs_mod.ui.forms.categories.UIFormCategory;
@@ -19,7 +20,11 @@ public class UIFormPalette extends UIElement implements IUIFormList
 
     public Consumer<Form> callback;
 
-    private UIFormCategory lastSelected;
+    /* The category + form being edited, held as the underlying data objects (not the UIFormCategory
+     * wrapper). UIFormList.setupForms() rebuilds the wrappers whenever the categories reload mid-edit,
+     * which would strand a wrapper reference on a stale object and mis-resolve the replace index. */
+    private FormCategory lastCategory;
+    private Form lastForm;
     private boolean background = true;
     private boolean cantExit;
     private boolean immersive;
@@ -34,12 +39,16 @@ public class UIFormPalette extends UIElement implements IUIFormList
     {
         UIContext context = parent.getContext();
 
-        if (!ignore)
+        /* Guard the missing context unconditionally: the ignore=true path used to skip this and then
+         * NPE on context.unfocus() below (see UISelectorsOverlayPanel). */
+        if (context == null)
         {
-            if (!parent.getRoot().getChildren(UIFormPalette.class).isEmpty() || context == null)
-            {
-                return null;
-            }
+            return null;
+        }
+
+        if (!ignore && !parent.getRoot().getChildren(UIFormPalette.class).isEmpty())
+        {
+            return null;
         }
 
         context.unfocus();
@@ -143,39 +152,61 @@ public class UIFormPalette extends UIElement implements IUIFormList
     @Override
     public void toggleEditor()
     {
-        this.events.emit(new UIToggleEditorEvent(this, !this.editor.isEditing()));
+        boolean wasEditing = this.editor.isEditing();
 
-        if (!this.editor.isEditing())
+        if (!wasEditing)
         {
             Form form = this.list.getSelected();
+            UIFormCategory category = this.list.getSelectedCategory();
 
             if (this.editor.edit(form))
             {
-                this.lastSelected = this.list.getSelectedCategory();
+                this.lastCategory = category == null ? null : category.category;
+                this.lastForm = category == null ? null : category.selected;
+            }
+            else
+            {
+                /* Entering edit failed (null form / unregistered form class). Stay in list mode and
+                 * don't strand any edit state. */
+                this.lastCategory = null;
+                this.lastForm = null;
             }
         }
         else
         {
             Form form = this.editor.finish();
 
-            if (this.canModify && this.lastSelected.category.canModify(form))
+            /* Resolve the index at finish time against the live data objects: the UI wrapper may have
+             * been rebuilt mid-edit, and canModify guards the whole write. */
+            if (this.canModify && this.lastCategory != null && this.lastCategory.canModify(form))
             {
-                int index = this.lastSelected.category.getForms().indexOf(this.lastSelected.selected);
+                int index = this.lastCategory.getForms().indexOf(this.lastForm);
 
                 if (index >= 0)
                 {
-                    this.lastSelected.category.replaceForm(index, form);
+                    this.lastCategory.replaceForm(index, form);
                 }
             }
 
             this.list.setSelected(form);
             this.accept(form);
 
-            this.lastSelected = null;
+            this.lastCategory = null;
+            this.lastForm = null;
         }
 
-        this.list.setVisible(!this.editor.isEditing());
-        this.editor.setVisible(this.editor.isEditing());
+        boolean nowEditing = this.editor.isEditing();
+
+        /* Emit only on an actual state change, with the real post-transition state. Emitting a
+         * predicted state up front (before edit() could fail) left listeners believing editing had
+         * started with no matching end event - e.g. a leaked camera controller in the model block. */
+        if (wasEditing != nowEditing)
+        {
+            this.events.emit(new UIToggleEditorEvent(this, nowEditing));
+        }
+
+        this.list.setVisible(!nowEditing);
+        this.editor.setVisible(nowEditing);
     }
 
     @Override
