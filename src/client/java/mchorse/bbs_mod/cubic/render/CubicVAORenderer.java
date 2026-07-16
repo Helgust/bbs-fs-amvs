@@ -29,6 +29,12 @@ public class CubicVAORenderer extends CubicCubeRenderer
     private Function<String, Link> textureResolver;
 
     /**
+     * Frame-constant uniforms (projection, fog, lights, ...) are identical for every group/material of
+     * this walk, so they are uploaded once — on the first drawn group — instead of per material draw.
+     */
+    private boolean frameUniformsSet;
+
+    /**
      * Non-null puts the renderer in hybrid mode (a welded model): these groups — and any group with no baked VAO —
      * fall through to the CPU immediate path so their welded cubes can deform against a live neighbour, while every
      * other group still rides its VAO on the GPU. Null keeps the plain all-VAO behaviour for unwelded models.
@@ -89,6 +95,12 @@ public class CubicVAORenderer extends CubicCubeRenderer
             light = u | v << 16;
         }
 
+        if (!this.frameUniformsSet)
+        {
+            ModelVAORenderer.setupFrameUniforms(this.program);
+            this.frameUniformsSet = true;
+        }
+
         /* One draw per material; bind that material's resolved texture before each. */
         for (Map.Entry<String, ModelVAO> entry : groupVaos.entrySet())
         {
@@ -102,7 +114,7 @@ public class CubicVAORenderer extends CubicCubeRenderer
                 }
             }
 
-            ModelVAORenderer.render(this.program, entry.getValue(), stack, r, g, b, a, light, this.overlay);
+            ModelVAORenderer.renderDraw(this.program, entry.getValue(), stack, r, g, b, a, light, this.overlay);
         }
 
         return false;

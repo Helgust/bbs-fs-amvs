@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.cubic.render.vao;
 
 import mchorse.bbs_mod.client.BBSRendering;
+import net.minecraft.client.gl.VertexBuffer;
 import net.minecraft.client.render.VertexFormat;
 import net.minecraft.client.render.VertexFormats;
 import org.lwjgl.opengl.GL30;
@@ -11,19 +12,34 @@ public class ModelVAO implements IModelVAO
     private int vao2;
     private int count;
 
+    /* Buffer ids kept as fields so delete() can free them — deleting a VAO does not delete the
+     * VBOs it references, and these are the actual geometry memory. Leaking them on every model
+     * hot-reload bled VRAM continuously during long editing sessions. */
+    private int vertexBuffer;
+    private int normalBuffer;
+    private int tangentsBuffer;
+    private int texCoordBuffer;
+    private int midTexCoordBuffer;
+
     public ModelVAO(ModelVAOData data)
     {
-        int currentVAO = GL30.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
-
         this.upload(data);
 
-        GL30.glBindVertexArray(currentVAO);
+        /* Bake runs on the client thread between frames; leaving no VAO bound is sufficient (and
+         * clears vanilla's currentVertexBuffer cache) — no need for a glGetInteger sync to restore. */
+        VertexBuffer.unbind();
     }
 
     public void delete()
     {
         GL30.glDeleteVertexArrays(this.vao);
         GL30.glDeleteVertexArrays(this.vao2);
+
+        GL30.glDeleteBuffers(this.vertexBuffer);
+        GL30.glDeleteBuffers(this.normalBuffer);
+        GL30.glDeleteBuffers(this.tangentsBuffer);
+        GL30.glDeleteBuffers(this.texCoordBuffer);
+        GL30.glDeleteBuffers(this.midTexCoordBuffer);
     }
 
     public void upload(ModelVAOData data)
@@ -33,11 +49,17 @@ public class ModelVAO implements IModelVAO
 
         GL30.glBindVertexArray(this.vao);
 
-        int vertexBuffer = GL30.glGenBuffers();
-        int normalBuffer = GL30.glGenBuffers();
-        int tangentsBuffer = GL30.glGenBuffers();
-        int texCoordBuffer = GL30.glGenBuffers();
-        int midTexCoordBuffer = GL30.glGenBuffers();
+        this.vertexBuffer = GL30.glGenBuffers();
+        this.normalBuffer = GL30.glGenBuffers();
+        this.tangentsBuffer = GL30.glGenBuffers();
+        this.texCoordBuffer = GL30.glGenBuffers();
+        this.midTexCoordBuffer = GL30.glGenBuffers();
+
+        int vertexBuffer = this.vertexBuffer;
+        int normalBuffer = this.normalBuffer;
+        int tangentsBuffer = this.tangentsBuffer;
+        int texCoordBuffer = this.texCoordBuffer;
+        int midTexCoordBuffer = this.midTexCoordBuffer;
 
         GL30.glBindBuffer(GL30.GL_ARRAY_BUFFER, vertexBuffer);
         GL30.glBufferData(GL30.GL_ARRAY_BUFFER, data.vertices(), GL30.GL_STATIC_DRAW);
