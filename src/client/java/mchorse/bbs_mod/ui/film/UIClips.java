@@ -6,6 +6,7 @@ import mchorse.bbs_mod.camera.clips.ClipFactoryData;
 import mchorse.bbs_mod.camera.clips.converters.IClipConverter;
 import mchorse.bbs_mod.camera.clips.overwrite.KeyframeClip;
 import mchorse.bbs_mod.camera.utils.TimeUtils;
+import mchorse.bbs_mod.cubic.ModelInstance;
 import mchorse.bbs_mod.data.types.BaseType;
 import mchorse.bbs_mod.data.types.ListType;
 import mchorse.bbs_mod.data.types.MapType;
@@ -15,6 +16,8 @@ import mchorse.bbs_mod.film.replays.Replay;
 import mchorse.bbs_mod.forms.FormUtilsClient;
 import mchorse.bbs_mod.forms.entities.IEntity;
 import mchorse.bbs_mod.forms.forms.Form;
+import mchorse.bbs_mod.forms.forms.ModelForm;
+import mchorse.bbs_mod.forms.renderers.ModelFormRenderer;
 import mchorse.bbs_mod.forms.renderers.utils.MatrixCache;
 import mchorse.bbs_mod.graphics.window.Window;
 import mchorse.bbs_mod.l10n.keys.IKey;
@@ -34,6 +37,7 @@ import mchorse.bbs_mod.ui.utils.Scroll;
 import mchorse.bbs_mod.ui.utils.ScrollDirection;
 import mchorse.bbs_mod.ui.utils.UIUtils;
 import mchorse.bbs_mod.ui.utils.context.ContextMenuManager;
+import mchorse.bbs_mod.ui.utils.pose.PoseBones;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.presets.UICopyPasteController;
 import mchorse.bbs_mod.ui.utils.presets.UIPresetContextMenu;
@@ -646,24 +650,7 @@ public class UIClips extends UIElement
      */
     private void fromReplayPickBone(Replay replay, int index, int mouseX, int mouseY)
     {
-        IEntity entity = this.getSceneEntities().get(index);
-        Form form = entity == null ? null : entity.getForm();
-
-        List<String> bones = new ArrayList<>();
-
-        if (form != null)
-        {
-            for (String key : FormUtilsClient.getRenderer(form).collectMatrices(entity, 0F).keySet())
-            {
-                /* Skip the empty root key (the form origin), it isn't a bone */
-                if (!key.isEmpty())
-                {
-                    bones.add(key);
-                }
-            }
-
-            bones.sort(String::compareToIgnoreCase);
-        }
+        List<String> bones = this.collectReplayBones(replay, this.getSceneEntities().get(index));
 
         /* No bones available - fall back to the recorded anchor position */
         if (bones.isEmpty())
@@ -680,6 +667,54 @@ public class UIClips extends UIElement
                 menu.action(Icons.LIMB, IKey.constant(bone), () -> this.createReplayCameraClip(replay, index, bone, mouseX, mouseY));
             }
         });
+    }
+
+    /**
+     * Bones offered by the "from player recording" bone picker.
+     *
+     * <p>Prefers the live scene entity's rendered matrices: their keys are exactly
+     * what {@link #sampleBoneTransform} resolves per tick, so a chosen bone samples
+     * cleanly. When that entity isn't spawned in the scene, or its model hasn't
+     * finished loading, {@code collectMatrices} yields nothing and the menu used to
+     * be skipped silently - so fall back to the replay form's model rig, keeping the
+     * picker visible. If no live entity is available at clip time, sampling still
+     * uses the anchor fallback in {@link #createReplayCameraClip}.</p>
+     */
+    private List<String> collectReplayBones(Replay replay, IEntity entity)
+    {
+        List<String> bones = new ArrayList<>();
+
+        if (entity != null && entity.getForm() != null)
+        {
+            for (String key : FormUtilsClient.getRenderer(entity.getForm()).collectMatrices(entity, 0F).keySet())
+            {
+                /* Skip the empty root key (the form origin), it isn't a bone */
+                if (!key.isEmpty())
+                {
+                    bones.add(key);
+                }
+            }
+        }
+
+        if (bones.isEmpty() && replay.form.get() instanceof ModelForm modelForm)
+        {
+            ModelInstance model = ModelFormRenderer.getModel(modelForm);
+
+            if (model != null)
+            {
+                for (String bone : model.model.getGroupKeysInHierarchyOrder())
+                {
+                    if (!PoseBones.isHidden(model.getDisabledBones(), bone))
+                    {
+                        bones.add(bone);
+                    }
+                }
+            }
+        }
+
+        bones.sort(String::compareToIgnoreCase);
+
+        return bones;
     }
 
     private void createReplayCameraClip(Replay replay, int index, String bone, int mouseX, int mouseY)
