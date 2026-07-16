@@ -14,6 +14,7 @@ import mchorse.bbs_mod.utils.MathUtils;
 import mchorse.bbs_mod.utils.joml.Matrices;
 import mchorse.bbs_mod.utils.pose.Pose;
 import mchorse.bbs_mod.utils.pose.PoseTransform;
+import mchorse.bbs_mod.utils.pose.Transform;
 import org.joml.Quaternionf;
 
 import java.util.ArrayList;
@@ -229,6 +230,66 @@ public class Model implements IMapSerializable, IModel
     public Collection<ModelGroup> getAllGroups()
     {
         return this.namedGroups.values();
+    }
+
+    /**
+     * A cheap order-sensitive fingerprint of everything in the current pose that affects the matrices
+     * {@link mchorse.bbs_mod.cubic.render.CubicMatrixRenderer} captures: each group's live transform
+     * ({@code current} translate/rotate/rotate2/scale), its transient {@code orient} quaternion and IK
+     * {@code offset}, and its {@code visible} flag (invisible groups are captured as identity). Two frames
+     * with an equal fingerprint produce identical captured bone matrices, so the capture walk can be
+     * skipped — see {@code ModelFormRenderer.captureMatrices}. This reads O(groups) floats with no
+     * allocation, far cheaper than the matrix walk it guards. It intentionally mirrors the fields
+     * {@link mchorse.bbs_mod.cubic.render.ICubicRenderer}'s transform helpers consume — keep it in sync if
+     * those change, or attached bones/gizmos will lag a frame behind a pose edit.
+     */
+    public long hashPoseState()
+    {
+        long h = 1L;
+
+        for (ModelGroup group : this.getAllGroups())
+        {
+            Transform t = group.current;
+
+            h = hashVector(h, t.translate.x, t.translate.y, t.translate.z);
+            h = hashVector(h, t.rotate.x, t.rotate.y, t.rotate.z);
+            h = hashVector(h, t.rotate2.x, t.rotate2.y, t.rotate2.z);
+            h = hashVector(h, t.scale.x, t.scale.y, t.scale.z);
+            h = h * 31L + (group.visible ? 1L : 0L);
+
+            if (group.orient != null)
+            {
+                h = h * 31L + Float.floatToIntBits(group.orient.x);
+                h = h * 31L + Float.floatToIntBits(group.orient.y);
+                h = h * 31L + Float.floatToIntBits(group.orient.z);
+                h = h * 31L + Float.floatToIntBits(group.orient.w);
+            }
+            else
+            {
+                /* Distinct marker so a bone flipping between orient and euler always changes the hash. */
+                h = h * 31L + 0x9E3779B97F4A7C15L;
+            }
+
+            if (group.offset != null)
+            {
+                h = hashVector(h, group.offset.x, group.offset.y, group.offset.z);
+            }
+            else
+            {
+                h = h * 31L + 0xC2B2AE3D27D4EB4FL;
+            }
+        }
+
+        return h;
+    }
+
+    private static long hashVector(long h, float x, float y, float z)
+    {
+        h = h * 31L + Float.floatToIntBits(x);
+        h = h * 31L + Float.floatToIntBits(y);
+        h = h * 31L + Float.floatToIntBits(z);
+
+        return h;
     }
 
     @Override
