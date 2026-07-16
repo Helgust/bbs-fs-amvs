@@ -1,7 +1,10 @@
 package mchorse.bbs_mod.ui.framework;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.logging.LogUtils;
+import mchorse.bbs_mod.l10n.keys.IKey;
 import mchorse.bbs_mod.ui.Keys;
+import mchorse.bbs_mod.ui.framework.elements.IUICloseHandler;
 import mchorse.bbs_mod.ui.framework.elements.IUIElement;
 import mchorse.bbs_mod.ui.framework.elements.IViewport;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
@@ -15,12 +18,15 @@ import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.minecraft.client.MinecraftClient;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL11;
+import org.slf4j.Logger;
 
 /**
  * Base class for GUI screens using this framework
  */
 public abstract class UIBaseMenu
 {
+    private static final Logger LOGGER = LogUtils.getLogger();
+
     /** F8 toggle for the transform gizmo / axes. Read through {@link #shouldRenderAxes()}, which also
      *  honours the hold-to-hide key, rather than directly. */
     public static boolean renderAxes = true;
@@ -135,11 +141,20 @@ public abstract class UIBaseMenu
         {
             this.context.pushViewport(this.viewport);
 
-            IUIElement element = this.root.mouseClicked(this.context);
+            try
+            {
+                IUIElement element = this.root.mouseClicked(this.context);
 
-            this.context.popViewport();
-
-            result = element != null;
+                result = element != null;
+            }
+            catch (Throwable t)
+            {
+                this.handleDispatchError("mouseClicked", t);
+            }
+            finally
+            {
+                this.context.popViewport();
+            }
         }
 
         return result;
@@ -155,11 +170,20 @@ public abstract class UIBaseMenu
         {
             this.context.pushViewport(this.viewport);
 
-            IUIElement element = this.root.mouseScrolled(this.context);
+            try
+            {
+                IUIElement element = this.root.mouseScrolled(this.context);
 
-            this.context.popViewport();
-
-            result = element != null;
+                result = element != null;
+            }
+            catch (Throwable t)
+            {
+                this.handleDispatchError("mouseScrolled", t);
+            }
+            finally
+            {
+                this.context.popViewport();
+            }
         }
 
         return result;
@@ -175,11 +199,20 @@ public abstract class UIBaseMenu
         {
             this.context.pushViewport(this.viewport);
 
-            IUIElement element = this.root.mouseReleased(this.context);
+            try
+            {
+                IUIElement element = this.root.mouseReleased(this.context);
 
-            this.context.popViewport();
-
-            result = element != null;
+                result = element != null;
+            }
+            catch (Throwable t)
+            {
+                this.handleDispatchError("mouseReleased", t);
+            }
+            finally
+            {
+                this.context.popViewport();
+            }
         }
 
         Gizmo.INSTANCE.stop();
@@ -198,21 +231,32 @@ public abstract class UIBaseMenu
 
         boolean enabled = this.root.isEnabled();
 
-        /* ESC is routed centrally before the generic tree walk: close exactly one thing, innermost
-         * first (focus -> context menu -> topmost overlay), and only fall through to the tree (which
-         * lets the form palette / editor / keyframes cancel their own gestures) when none of those
-         * apply. This kills the "focus stranded under a BLOCKing overlay" dead-ESC deadlock and stops
-         * a dropped link in the old decentral chain from nuking the whole dashboard. */
-        if (enabled && this.context.isPressed(GLFW.GLFW_KEY_ESCAPE) && this.handleEscape())
+        try
         {
-            return true;
+            /* ESC is routed centrally before the generic tree walk: close exactly one thing, innermost
+             * first (focus -> context menu -> topmost overlay), and only fall through to the tree (which
+             * lets the form palette / editor / keyframes cancel their own gestures) when none of those
+             * apply. This kills the "focus stranded under a BLOCKing overlay" dead-ESC deadlock and stops
+             * a dropped link in the old decentral chain from nuking the whole dashboard. */
+            if (enabled && this.context.isPressed(GLFW.GLFW_KEY_ESCAPE) && this.handleEscape())
+            {
+                return true;
+            }
+
+            /* Only dispatch (and honour side effects) into an enabled root. */
+            IUIElement element = enabled ? this.root.keyPressed(this.context) : null;
+
+            if (element != null)
+            {
+                return true;
+            }
         }
-
-        /* Only dispatch (and honour side effects) into an enabled root. */
-        IUIElement element = enabled ? this.root.keyPressed(this.context) : null;
-
-        if (element != null)
+        catch (Throwable t)
         {
+            this.handleDispatchError("handleKey", t);
+
+            /* Swallow the press: an ESC that blew up mid-dispatch must NOT fall through to the
+             * close-dashboard fallback below and nuke a shared, now half-broken dashboard. */
             return true;
         }
 
@@ -224,6 +268,30 @@ public abstract class UIBaseMenu
         }
 
         return false;
+    }
+
+    /**
+     * Central handler for an exception thrown while dispatching a UI input event. Because the
+     * dashboard is a retained singleton (arch doc §8), letting the exception propagate into the
+     * vanilla {@code Screen} crashes the game or half-applies the event and leaves the shared tree
+     * permanently corrupted. Instead we log it, notify the user, and (in dev) dump the invariant
+     * state that most often explains such a crash. See Phase 4 item 3 of UI_BUGFIX_PLAN.md.
+     */
+    private void handleDispatchError(String phase, Throwable t)
+    {
+        LOGGER.error("BBS UI: uncaught exception while dispatching {}", phase, t);
+
+        try
+        {
+            this.context.notifyError(IKey.raw("UI error during " + phase + " (see log): " + t));
+        }
+        catch (Throwable ignored)
+        {}
+
+        if (net.fabricmc.loader.api.FabricLoader.getInstance().isDevelopmentEnvironment())
+        {
+            UIInvariants.checkAndLog(this, LOGGER);
+        }
     }
 
     /**
@@ -258,11 +326,13 @@ public abstract class UIBaseMenu
             return true;
         }
 
-        /* 3. Topmost overlay. */
-        if (overlay != null)
-        {
-            overlay.closeItself();
+        /* 3. Topmost modal close handler on the overlay layer. This is any IUICloseHandler (overlays
+         * and third-party modals alike), so the router no longer hardcodes overlay types - Phase 4
+         * item 2. */
+        IUICloseHandler handler = this.getTopmostCloseHandler();
 
+        if (handler != null && handler.requestClose(this.context))
+        {
             return true;
         }
 
@@ -279,6 +349,26 @@ public abstract class UIBaseMenu
             if (children.get(i) instanceof UIOverlay)
             {
                 return (UIOverlay) children.get(i);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The topmost dismissable modal on the overlay layer (an overlay, or any third-party
+     * {@link IUICloseHandler}). Context menus sit above overlays and are handled in the step before
+     * this one, so they are not returned here in practice.
+     */
+    private IUICloseHandler getTopmostCloseHandler()
+    {
+        java.util.List<IUIElement> children = this.overlay.getChildren();
+
+        for (int i = children.size() - 1; i >= 0; i--)
+        {
+            if (children.get(i) instanceof IUICloseHandler)
+            {
+                return (IUICloseHandler) children.get(i);
             }
         }
 
@@ -303,7 +393,14 @@ public abstract class UIBaseMenu
 
         if (this.root.isEnabled())
         {
-            this.root.textInput(this.context);
+            try
+            {
+                this.root.textInput(this.context);
+            }
+            catch (Throwable t)
+            {
+                this.handleDispatchError("handleTextInput", t);
+            }
         }
     }
 

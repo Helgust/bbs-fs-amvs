@@ -2,12 +2,13 @@ package mchorse.bbs_mod.ui.framework.elements.context;
 
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.ui.framework.UIContext;
+import mchorse.bbs_mod.ui.framework.elements.IUICloseHandler;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.utils.EventPropagation;
 import mchorse.bbs_mod.utils.colors.Colors;
 import org.lwjgl.glfw.GLFW;
 
-public abstract class UIContextMenu extends UIElement
+public abstract class UIContextMenu extends UIElement implements IUICloseHandler
 {
     public UIContextMenu()
     {
@@ -17,6 +18,27 @@ public abstract class UIContextMenu extends UIElement
     }
 
     public abstract boolean isEmpty();
+
+    @Override
+    public boolean requestClose(UIContext context)
+    {
+        if (!this.hasParent())
+        {
+            return false;
+        }
+
+        /* Clear the context's cached reference when it points at us, then detach. */
+        if (context.contextMenu == this)
+        {
+            context.closeContextMenu();
+        }
+        else
+        {
+            this.removeFromParent();
+        }
+
+        return true;
+    }
 
     /**
      * Set mouse coordinate

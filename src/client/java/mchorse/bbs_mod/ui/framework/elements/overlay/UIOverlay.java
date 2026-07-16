@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.ui.framework.elements.overlay;
 
 import mchorse.bbs_mod.ui.framework.UIContext;
+import mchorse.bbs_mod.ui.framework.elements.IUICloseHandler;
 import mchorse.bbs_mod.ui.framework.elements.UIElement;
 import mchorse.bbs_mod.ui.framework.elements.utils.EventPropagation;
 import mchorse.bbs_mod.ui.utils.UIUtils;
@@ -12,7 +13,7 @@ import org.lwjgl.glfw.GLFW;
 import java.util.HashMap;
 import java.util.Map;
 
-public class UIOverlay extends UIElement
+public class UIOverlay extends UIElement implements IUICloseHandler
 {
     private static final Map<String, Vector2i> offsets = new HashMap<>();
 
@@ -108,6 +109,10 @@ public class UIOverlay extends UIElement
 
         overlay.full(context.menu.overlay);
         context.menu.overlay.add(overlay);
+        /* Open a modal focus scope before wiring the panel, so the panel's own auto-focus (e.g. a
+         * list overlay focusing its search box in onAdd) is accepted while any stranded outside
+         * focus is cleared. See UIContext.pushModalScope / Phase 4 item 1. */
+        context.pushModalScope(overlay);
         overlay.add(panel);
         context.menu.overlay.resize();
     }
@@ -134,10 +139,27 @@ public class UIOverlay extends UIElement
         return this.background(0);
     }
 
+    @Override
+    public boolean requestClose(UIContext context)
+    {
+        this.closeItself();
+
+        return true;
+    }
+
     public void closeItself()
     {
+        /* Capture the context before we detach, so the modal scope can be closed (and the previous
+         * focus restored) even though getContext() would return null after removeFromParent. */
+        UIContext context = this.getContext();
+
         this.removeFromParent();
         UIUtils.playClick();
+
+        if (context != null)
+        {
+            context.popModalScope(this);
+        }
 
         for (UIOverlayPanel element : this.getChildren(UIOverlayPanel.class))
         {

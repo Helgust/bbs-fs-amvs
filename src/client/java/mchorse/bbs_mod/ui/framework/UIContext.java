@@ -22,6 +22,7 @@ import mchorse.bbs_mod.utils.MathUtils;
 import mchorse.bbs_mod.utils.colors.Colors;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -37,6 +38,16 @@ public class UIContext implements IViewportStack
     public final UINotifications notifications;
     public IFocusedUIElement activeElement;
     public UIContextMenu contextMenu;
+
+    /**
+     * Modal focus scopes (Phase 4 item 1 of UI_BUGFIX_PLAN.md). When a modal (a {@code UIOverlay})
+     * opens it pushes itself here together with the element that was focused at the time. While a
+     * scope is on top, {@link #focus(IFocusedUIElement, boolean)} refuses to focus any element that
+     * is not inside the topmost scope - this removes the whole "focus stranded under a BLOCKing
+     * overlay" bug family (the dead-ESC deadlock in UI_BUGFIX_PLAN §0) at the source instead of
+     * healing it after the fact. Closing the scope restores the previously focused element.
+     */
+    private final List<ModalScope> modalScopes = new ArrayList<>();
 
     /* Mouse states */
     public int mouseX;
@@ -319,6 +330,14 @@ public class UIContext implements IViewportStack
             return;
         }
 
+        /* Modal scoping: never focus an element outside the topmost open modal (unfocus - null -
+         * is always allowed). This is what prevents focus from being stranded under a BLOCKing
+         * overlay in the first place. */
+        if (element != null && !this.isInTopmostModalScope(element))
+        {
+            return;
+        }
+
         if (this.activeElement != null)
         {
             this.activeElement.unfocus(this);
@@ -375,6 +394,131 @@ public class UIContext implements IViewportStack
     public void unfocus()
     {
         this.focus(null);
+    }
+
+    /* Modal focus scopes */
+
+    /**
+     * Open a modal focus scope rooted at the given element (called by {@code UIOverlay} when it is
+     * added to the tree). Remembers the currently focused element so it can be restored when the
+     * scope closes. While this scope is topmost, {@link #focus(IFocusedUIElement, boolean)} only
+     * accepts elements that are this element or a descendant of it.
+     */
+    public void pushModalScope(UIElement scope)
+    {
+        if (scope == null)
+        {
+            return;
+        }
+
+        this.pruneModalScopes();
+
+        IFocusedUIElement previousFocus = this.activeElement;
+
+        /* Clear any focus that lived outside the new modal before opening it, so the modal starts
+         * clean and focus can never be stranded underneath it. It is restored on close. */
+        this.unfocus();
+        this.modalScopes.add(new ModalScope(scope, previousFocus));
+    }
+
+    /**
+     * Close the modal focus scope rooted at the given element (called by {@code UIOverlay} on
+     * {@code closeItself}). Restores the focus that was active when the scope opened, if that
+     * element is still in the tree. No-op if the scope was never open (defensive - a scope may have
+     * been pruned already when its overlay was force-removed without {@code closeItself}).
+     */
+    public void popModalScope(UIElement scope)
+    {
+        if (scope == null)
+        {
+            return;
+        }
+
+        ModalScope removed = null;
+
+        for (int i = this.modalScopes.size() - 1; i >= 0; i--)
+        {
+            if (this.modalScopes.get(i).scope == scope)
+            {
+                removed = this.modalScopes.remove(i);
+
+                break;
+            }
+        }
+
+        this.pruneModalScopes();
+
+        if (removed != null)
+        {
+            /* Drop focus first (it lived inside the closing scope), then restore the previous focus
+             * if it is still valid under the now-topmost scope. */
+            this.unfocus();
+
+            if (removed.previousFocus instanceof UIElement && ((UIElement) removed.previousFocus).canBeSeen())
+            {
+                this.focus(removed.previousFocus);
+            }
+        }
+    }
+
+    private boolean isInTopmostModalScope(IFocusedUIElement element)
+    {
+        UIElement scope = this.getTopmostModalScope();
+
+        if (scope == null)
+        {
+            return true;
+        }
+
+        if (!(element instanceof UIElement))
+        {
+            return false;
+        }
+
+        UIElement target = (UIElement) element;
+
+        return scope == target || scope.isDescendant(target);
+    }
+
+    private UIElement getTopmostModalScope()
+    {
+        this.pruneModalScopes();
+
+        return this.modalScopes.isEmpty() ? null : this.modalScopes.get(this.modalScopes.size() - 1).scope;
+    }
+
+    /**
+     * Drop any scopes whose element has left the tree (an overlay removed without going through
+     * {@code closeItself}), so a leaked scope can never permanently strand focus.
+     */
+    private void pruneModalScopes()
+    {
+        for (int i = this.modalScopes.size() - 1; i >= 0; i--)
+        {
+            if (!this.modalScopes.get(i).scope.hasParent())
+            {
+                this.modalScopes.remove(i);
+            }
+        }
+    }
+
+    public int getModalScopeDepth()
+    {
+        this.pruneModalScopes();
+
+        return this.modalScopes.size();
+    }
+
+    private static class ModalScope
+    {
+        public final UIElement scope;
+        public final IFocusedUIElement previousFocus;
+
+        public ModalScope(UIElement scope, IFocusedUIElement previousFocus)
+        {
+            this.scope = scope;
+            this.previousFocus = previousFocus;
+        }
     }
 
     public boolean focus(UIElement parent, int factor)
