@@ -1,6 +1,7 @@
 package mchorse.bbs_mod.mixin.client;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import mchorse.bbs_mod.BBSModClient;
 import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.client.BBSRendering;
 import mchorse.bbs_mod.utils.colors.Color;
@@ -44,7 +45,14 @@ public class WorldRendererMixin
     {
         if (BBSSettings.chromaSkyEnabled.get() && !BBSSettings.chromaSkyTerrain.get())
         {
-            BBSRendering.onRenderChunkLayer(matrices);
+            /* renderLayer is called 5+ times per frame (solid, cutout, cutout-mipped, translucent,
+             * tripwire). Only render the BBS films once — on the solid layer, matching the TAIL hook —
+             * otherwise, under Iris, onRenderChunkLayer would draw every film once per layer call
+             * (~5-10x/frame). Every layer is still cancelled to suppress the chroma-hidden terrain. */
+            if (renderLayer == RenderLayer.getSolid())
+            {
+                BBSRendering.onRenderChunkLayer(matrices);
+            }
 
             info.cancel();
         }
@@ -62,6 +70,16 @@ public class WorldRendererMixin
     @Inject(at = @At("RETURN"), method = "loadEntityOutlinePostProcessor")
     private void onLoadEntityOutlineShader(CallbackInfo info)
     {
+        /* This fires as part of a WorldRenderer.reload() — i.e. during the resource/shader-enable reload
+         * storm, when vanilla (and Iris) are already reallocating everything. When BBS's size-lie is off,
+         * vanilla has just recreated these framebuffers at the correct window size, so re-resizing them
+         * here is redundant work piled onto that stall. Only intervene when custom size is active, where
+         * the reload may have left them at window size while BBS needs them at video size. */
+        if (!BBSRendering.isCustomSize())
+        {
+            return;
+        }
+
         BBSRendering.resizeExtraFramebuffers();
     }
 
@@ -70,6 +88,19 @@ public class WorldRendererMixin
     {
         if (this.entityOutlinesFramebuffer == null)
         {
+            return;
+        }
+
+        /* Fires on every real window resize AND focus change. Vanilla already resizes its own extra
+         * framebuffers on a genuine resize; BBS only needs to intervene when its size-lie may have left
+         * them at video size. Skipping this when custom size is off removes the alt-tab / focus-change
+         * hitch (each call touches 6 framebuffers and can cascade into an Iris pipeline rebuild). */
+        if (!BBSRendering.isCustomSize())
+        {
+            /* Lie inactive here, so getFramebufferWidth()/getWidth() report the real display: refresh the
+             * DPI scale so a monitor/scaling change (e.g. dragging to a 150% display) is picked up. */
+            BBSModClient.updateOriginalFramebufferScale();
+
             return;
         }
 

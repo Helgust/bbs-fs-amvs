@@ -105,9 +105,13 @@ public class GameRendererMixin
     @Inject(method = "render", at = @At(value = "FIELD", target = "Lnet/minecraft/client/option/GameOptions;hudHidden:Z", opcode = Opcodes.GETFIELD, ordinal = 0))
     private void onBeforeHudRendering(float tickDelta, long startTime, boolean tick, CallbackInfo info)
     {
-        ICameraController current = BBSModClient.getCameraController().getCurrent();
-
-        if (MinecraftClient.getInstance().options.hudHidden && current == null)
+        /* When the HUD is hidden vanilla skips InGameHud.render entirely, so neither the
+         * TAIL nor the HEAD hook there fires. This is the only trigger for the hudHidden case
+         * (including F1 + an active PlayCameraController + no screen — a normal clean-recording
+         * setup that previously froze on one frame). The current == null condition was dropped:
+         * onRenderBeforeScreen's toggleFramebuffer guard makes any overlap with the HEAD hook
+         * harmless. */
+        if (MinecraftClient.getInstance().options.hudHidden)
         {
             BBSRendering.onRenderBeforeScreen();
         }
