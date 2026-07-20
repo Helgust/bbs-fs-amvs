@@ -250,26 +250,6 @@ public class BBSModClient implements ClientModInitializer
         return Math.max(originalFramebufferScale, 1);
     }
 
-    /**
-     * Recompute the real display DPI scale (framebuffer pixels per window point). Must only be called
-     * while BBS's framebuffer size-lie is inactive ({@code !BBSRendering.isCustomSize()}), otherwise
-     * {@code getFramebufferWidth()} returns the lied video size and would feed the lie back into itself.
-     * Uses float division — integer division stored 1.0 on a 150%-scale display (true ratio 1.5),
-     * producing wrongly-sized/blurry captures on fractional-scale and Retina displays.
-     */
-    public static void updateOriginalFramebufferScale()
-    {
-        Window window = MinecraftClient.getInstance().getWindow();
-        int windowWidth = window.getWidth();
-
-        if (windowWidth <= 0)
-        {
-            return;
-        }
-
-        originalFramebufferScale = (float) window.getFramebufferWidth() / windowWidth;
-    }
-
     public static ModelProperties getItemStackProperties(ItemStack stack)
     {
         ModelBlockItemRenderer.Item item = modelBlockItemRenderer.get(stack);
@@ -638,7 +618,9 @@ public class BBSModClient implements ClientModInitializer
             BBSRendering.setupFramebuffer();
             provider.register(new MinecraftSourcePack());
 
-            updateOriginalFramebufferScale();
+            Window window = MinecraftClient.getInstance().getWindow();
+
+            originalFramebufferScale = window.getFramebufferWidth() / window.getWidth();
         });
 
         URLTextureErrorCallback.EVENT.register((url, error) ->

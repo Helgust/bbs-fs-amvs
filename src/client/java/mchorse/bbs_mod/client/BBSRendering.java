@@ -178,19 +178,8 @@ public class BBSRendering
             return;
         }
 
-        /* Only the off<->on transition is log-worthy; size-only changes fire on every preview
-         * splitter drag and would spam the log at info level. */
-        if (BBSRendering.customSize != customSize)
-        {
-            LOGGER.info("[BBS film] setCustomSize customSize={} w={} h={} (stored width/height will be {})",
-                customSize, w, h, customSize ? w + "/" + h : "0/0");
-        }
-        else
-        {
-            LOGGER.debug("[BBS film] setCustomSize customSize={} w={} h={} (stored width/height will be {})",
-                customSize, w, h, customSize ? w + "/" + h : "0/0");
-        }
-
+        LOGGER.info("[BBS film] setCustomSize customSize={} w={} h={} (stored width/height will be {})",
+            customSize, w, h, customSize ? w + "/" + h : "0/0");
         BBSRendering.customSize = customSize;
 
         width = newWidth;
@@ -257,16 +246,20 @@ public class BBSRendering
 
     public static void resizeExtraFramebuffers()
     {
+        Set<Framebuffer> buffers = new HashSet<>();
         MinecraftClient mc = MinecraftClient.getInstance();
 
-        /* These six getters return distinct framebuffers, so no dedup set is needed; resizeFramebuffer
-         * already no-ops when the size already matches. This runs on window resize/focus changes. */
-        resizeFramebuffer(mc.worldRenderer.getEntityOutlinesFramebuffer());
-        resizeFramebuffer(mc.worldRenderer.getTranslucentFramebuffer());
-        resizeFramebuffer(mc.worldRenderer.getEntityFramebuffer());
-        resizeFramebuffer(mc.worldRenderer.getParticlesFramebuffer());
-        resizeFramebuffer(mc.worldRenderer.getWeatherFramebuffer());
-        resizeFramebuffer(mc.worldRenderer.getCloudsFramebuffer());
+        buffers.add(mc.worldRenderer.getEntityOutlinesFramebuffer());
+        buffers.add(mc.worldRenderer.getTranslucentFramebuffer());
+        buffers.add(mc.worldRenderer.getEntityFramebuffer());
+        buffers.add(mc.worldRenderer.getParticlesFramebuffer());
+        buffers.add(mc.worldRenderer.getWeatherFramebuffer());
+        buffers.add(mc.worldRenderer.getCloudsFramebuffer());
+
+        for (Framebuffer buffer : buffers)
+        {
+            resizeFramebuffer(buffer);
+        }
     }
 
     public static void resizeFramebuffer(Framebuffer framebuffer)
@@ -404,26 +397,6 @@ public class BBSRendering
 
     public static void onRenderBeforeScreen()
     {
-        /* Only meaningful while the BBS framebuffer is swapped in (custom size active).
-         * toggleFramebuffer is only ever true when customSize is active (set in
-         * onWorldRenderBegin) and this method ends by calling toggleFramebuffer(false), so:
-         * (a) non-film users pay nothing — no export texture sizing, no full-screen blit, no
-         * glGetInteger GPU sync; (b) the multiple mixin trigger points become harmless — the
-         * first call swaps the framebuffer back, the second early-outs here. */
-        if (!toggleFramebuffer)
-        {
-            /* A pending export-resolution action may have been scheduled while the framebuffer
-             * wasn't swapped in; it must still run rather than being stranded. */
-            if (pendingExportResolutionAction != null)
-            {
-                Runnable action = pendingExportResolutionAction;
-                pendingExportResolutionAction = null;
-                MinecraftClient.getInstance().execute(action);
-            }
-
-            return;
-        }
-
         Texture texture = getTexture();
         int targetWidth = getVideoWidth();
         int targetHeight = getVideoHeight();
@@ -479,12 +452,9 @@ public class BBSRendering
         pendingExportResolutionAction = action;
     }
 
-    /** Reused across calls — it is fully re-prepare()d each time, so a fresh allocation per call was waste. */
-    private static final WorldRenderContextImpl chunkLayerContext = new WorldRenderContextImpl();
-
     public static void onRenderChunkLayer(MatrixStack stack)
     {
-        WorldRenderContextImpl worldRenderContext = chunkLayerContext;
+        WorldRenderContextImpl worldRenderContext = new WorldRenderContextImpl();
         MinecraftClient mc = MinecraftClient.getInstance();
 
         worldRenderContext.prepare(

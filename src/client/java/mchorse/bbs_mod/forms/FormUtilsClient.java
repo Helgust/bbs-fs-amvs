@@ -38,32 +38,18 @@ import net.minecraft.client.render.chunk.BlockBufferBuilderStorage;
 import net.minecraft.client.render.model.ModelLoader;
 import net.minecraft.util.Util;
 
-import com.mojang.logging.LogUtils;
-import org.slf4j.Logger;
-
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.SortedMap;
 import java.util.Stack;
 
 public class FormUtilsClient
 {
-    private static final Logger LOGGER = LogUtils.getLogger();
-
     private static Map<Class, IFormRendererFactory> map = new HashMap<>();
     private static CustomVertexConsumerProvider customVertexConsumerProvider;
     private static Stack<Form> currentForm = new Stack<>();
-
-    /**
-     * Form renderer classes whose exception was already logged with a full stack trace.
-     * A broken form renders every frame, so we log the trace once per class and then stay
-     * quiet — otherwise a single failure would flood the log at 60 fps.
-     */
-    private static final Set<Class<?>> reportedRenderFailures = new HashSet<>();
 
     static
     {
@@ -185,14 +171,7 @@ public class FormUtilsClient
                 renderer.render(context);
             }
             catch (Exception e)
-            {
-                /* Rate-limited per renderer class: full trace the first time, silent after,
-                 * so regressions surface instead of the form silently vanishing. */
-                if (reportedRenderFailures.add(renderer.getClass()))
-                {
-                    LOGGER.error("Failed to render form {} via {}", form, renderer.getClass().getName(), e);
-                }
-            }
+            {}
 
             currentForm.pop();
         }
