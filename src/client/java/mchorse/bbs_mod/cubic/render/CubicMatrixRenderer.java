@@ -26,20 +26,6 @@ public class CubicMatrixRenderer implements ICubicRenderer
         }
     }
 
-    /**
-     * Reset every matrix back to identity so a cached renderer can be reused across frames while behaving
-     * exactly like a freshly-constructed one — invisible groups (which {@link #renderGroup} never touches)
-     * must read as identity, not as a stale matrix from a previous walk.
-     */
-    public void reset()
-    {
-        for (int i = 0; i < this.matrices.size(); i++)
-        {
-            this.matrices.get(i).identity();
-            this.origins.get(i).identity();
-        }
-    }
-
     @Override
     public void applyGroupTransformations(MatrixStack stack, ModelGroup group)
     {

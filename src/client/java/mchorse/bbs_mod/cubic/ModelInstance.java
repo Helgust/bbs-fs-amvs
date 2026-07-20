@@ -98,9 +98,6 @@ public class ModelInstance implements IModelInstance
     /** Per group, the geometry split into one VAO per material name (empty key = default texture). */
     private Map<ModelGroup, Map<String, ModelVAO>> vaos = new HashMap<>();
 
-    /** Reused across {@link #captureMatrices} calls to avoid reallocating 2N Matrix4f every frame. */
-    private transient CubicMatrixRenderer matrixRenderer;
-
     public transient Matrix4f lastBaseTransform;
     public transient Form form;
 
@@ -423,19 +420,7 @@ public class ModelInstance implements IModelInstance
         if (this.model instanceof Model model)
         {
             MatrixStack stack = new MatrixStack();
-
-            /* Reuse the renderer across frames instead of allocating 2N Matrix4f every call; reset() restores
-             * the fresh-construction identity state. Rebuilt only if the group count changed (hot-reload). */
-            if (this.matrixRenderer == null || this.matrixRenderer.matrices.size() != model.getAllGroupKeys().size())
-            {
-                this.matrixRenderer = new CubicMatrixRenderer(model);
-            }
-            else
-            {
-                this.matrixRenderer.reset();
-            }
-
-            CubicMatrixRenderer renderer = this.matrixRenderer;
+            CubicMatrixRenderer renderer = new CubicMatrixRenderer(model);
 
             CubicRenderer.processRenderModel(renderer, null, stack, model);
 

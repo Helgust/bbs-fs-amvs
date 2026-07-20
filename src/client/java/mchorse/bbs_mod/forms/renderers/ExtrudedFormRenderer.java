@@ -125,9 +125,6 @@ public class ExtrudedFormRenderer extends FormRenderer<ExtrudedForm>
             gameRenderer.getOverlayTexture().setupOverlayColor();
 
             ShaderProgram finalShader = shader.get();
-            /* CAUTION (2026-07-16): ModelVAORenderer.render's internals changed for perf (uniform setup
-             * split; glGetInteger VAO save/restore replaced with VertexBuffer.unbind()) but this ExtrudedForm
-             * path was NOT yet visually verified. Check an extruded form renders correctly, vanilla + Iris. */
             ModelVAORenderer.render(finalShader, data, matrices, color.r, color.g, color.b, color.a, light, overlay);
 
             RenderSystem.disableBlend();
