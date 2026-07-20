@@ -11,7 +11,6 @@ import mchorse.bbs_mod.cubic.animation.ActionsConfig;
 import mchorse.bbs_mod.cubic.animation.Animator;
 import mchorse.bbs_mod.cubic.animation.IAnimator;
 import mchorse.bbs_mod.cubic.animation.ProceduralAnimator;
-import mchorse.bbs_mod.cubic.data.model.Model;
 import mchorse.bbs_mod.cubic.data.model.ModelGroup;
 import mchorse.bbs_mod.cubic.ik.ModelIKDebug;
 import mchorse.bbs_mod.cubic.ik.ModelIKRuntime;
@@ -81,14 +80,6 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
     }
 
     private MatrixCache bones = new MatrixCache();
-
-    /* Dirty-skip for captureMatrices: the bones cache above only feeds cubic-model bone attachment
-     * (body parts, anchors, gizmos, trackers). Rebuilding it is a full second tree walk; skip it when the
-     * model's pose state is byte-identical to the last capture (Model.hashPoseState). lastCaptureHash is
-     * the fingerprint the current bones were built from; bonesValid guards "never captured / model changed
-     * / last capture was a non-cubic model". */
-    private long lastCaptureHash;
-    private boolean bonesValid;
 
     private ActionsConfig lastConfigs;
     private IAnimator animator;
@@ -214,7 +205,6 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
     {
         this.animator = null;
         this.lastModel = null;
-        this.bonesValid = false;
     }
 
     public void ensureAnimator(float transition)
@@ -242,8 +232,6 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
         this.lastConfigs = new ActionsConfig();
         this.lastConfigs.copy(actionsConfig);
         this.lastModel = model;
-        /* Different model instance -> its group set (and any cached bone matrices) no longer apply. */
-        this.bonesValid = false;
     }
 
     @Override
@@ -748,37 +736,7 @@ public class ModelFormRenderer extends FormRenderer<ModelForm> implements ITicka
     private void captureMatrices(ModelInstance model)
     {
         /* this.bones.clear()? */
-
-        /* CAUTION (2026-07-16): NOT yet visually verified. The dirty-skip is only as correct as
-         * Model.hashPoseState being a complete fingerprint of what CubicMatrixRenderer captures. To check:
-         * attach a body part / anchor to a spinning bone and confirm it tracks with zero one-frame lag; pose
-         * a bone in the editor and confirm gizmos/anchors update instantly; swap the form's model and confirm
-         * attachments re-resolve. Any lag/staleness means a posed field is missing from the hash. */
-
-        /* Cubic models expose a cheap pose fingerprint: if it matches the state the current bones were
-         * captured from, the recomputed matrices would be identical, so skip the whole capture walk. This is
-         * always correct — the skip only fires when the fingerprint is equal, i.e. the captured matrices
-         * cannot have changed. It just does not save work when the pose actually changes each frame. */
-        if (model.model instanceof Model cubic)
-        {
-            long hash = cubic.hashPoseState();
-
-            if (this.bonesValid && hash == this.lastCaptureHash)
-            {
-                return;
-            }
-
-            model.captureMatrices(this.bones);
-            this.lastCaptureHash = hash;
-            this.bonesValid = true;
-
-            return;
-        }
-
-        /* BOBJ / other model types have no cheap fingerprint here — always capture, and mark the cache as
-         * not hash-keyed so a later cubic capture can't wrongly match a stale hash. */
         model.captureMatrices(this.bones);
-        this.bonesValid = false;
     }
 
     @Override
