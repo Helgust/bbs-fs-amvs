@@ -50,7 +50,6 @@ import mchorse.bbs_mod.utils.clips.Clips;
 import mchorse.bbs_mod.utils.colors.Colors;
 import mchorse.bbs_mod.utils.factory.IFactory;
 import mchorse.bbs_mod.utils.keyframes.Keyframe;
-import mchorse.bbs_mod.utils.keyframes.KeyframeChannel;
 import mchorse.bbs_mod.utils.presets.PresetManager;
 import io.netty.util.collection.IntObjectHashMap;
 import io.netty.util.collection.IntObjectMap;
@@ -723,35 +722,9 @@ public class UIClips extends UIElement
 
         clip.fov.insert(0, 50D);
 
-        /* Full recorded span across every channel of the replay - entity keyframes
-         * and form properties alike. Recordings can start at any cursor tick, and
-         * simplify() (run when a recording stops) collapses a constant channel to a
-         * single keyframe at the start tick - a mob that stands still keeps one
-         * position keyframe while its head/body rotation still spans the whole
-         * recording - so no single channel is a reliable measure of the recording's
-         * start or length. */
-        int min = Integer.MAX_VALUE;
-        int max = Integer.MIN_VALUE;
-
-        List<KeyframeChannel> channels = new ArrayList<>(replay.keyframes.getChannels());
-
-        channels.addAll(replay.properties.properties.values());
-
-        for (KeyframeChannel channel : channels)
-        {
-            if (!channel.isEmpty())
-            {
-                min = Math.min(min, (int) channel.get(0).getTick());
-                max = Math.max(max, (int) channel.getLength());
-            }
-        }
-
-        if (min > max)
-        {
-            min = max = 0;
-        }
-
-        min = Math.max(0, min);
+        clip.x.copyKeyframes(replay.keyframes.x);
+        clip.y.copyKeyframes(replay.keyframes.y);
+        clip.z.copyKeyframes(replay.keyframes.z);
 
         IEntity entity = this.getSceneEntities().get(index);
 
@@ -759,18 +732,11 @@ public class UIClips extends UIElement
         {
             /* Rigidly attach the camera to the bone: both position and
              * orientation are taken from the bone's world matrix. */
-            this.sampleBoneTransform(clip, replay, entity, bone, min, max);
+            this.sampleBoneTransform(clip, replay, entity, bone);
         }
-
-        /* Anchor fallback: ride the recorded entity position and look direction.
-         * Also taken when bone sampling produced nothing (no bone was picked, or
-         * the bone's matrices couldn't be resolved), so the user always gets a
-         * clip with keyframes rather than a silently empty one. */
-        if (clip.x.isEmpty())
+        else
         {
-            clip.x.copyKeyframes(replay.keyframes.x);
-            clip.y.copyKeyframes(replay.keyframes.y);
-            clip.z.copyKeyframes(replay.keyframes.z);
+            /* Anchor fallback: ride the recorded entity position and look direction. */
             clip.yaw.copyKeyframes(replay.keyframes.yaw);
             clip.pitch.copyKeyframes(replay.keyframes.pitch);
 
@@ -778,50 +744,37 @@ public class UIClips extends UIElement
             {
                 keyframe.setValue(180D + keyframe.getValue());
             }
-
-            /* Rebase from absolute film ticks to clip-local time - keyframe
-             * clips are evaluated relative to the clip's start, but recordings
-             * store keyframes at the film tick they were recorded at. */
-            if (min > 0)
-            {
-                clip.x.moveX(-min);
-                clip.y.moveX(-min);
-                clip.z.moveX(-min);
-                clip.yaw.moveX(-min);
-                clip.pitch.moveX(-min);
-            }
         }
 
-        /* The clip covers the whole recorded span, floored so a replay with no
-         * usable channels still produces a clip that is visible and selectable. */
-        this.addReplayClip(clip, this.fromGraphX(mouseX), this.fromLayerY(mouseY), Math.max(max - min, 20));
+        double size = Math.max(
+            clip.x.getLength(),
+            Math.max(
+                clip.y.getLength(),
+                Math.max(
+                    clip.z.getLength(),
+                    Math.max(clip.yaw.getLength(), clip.pitch.getLength())
+                )
+            )
+        );
+
+        this.addReplayClip(clip, this.fromGraphX(mouseX), this.fromLayerY(mouseY), (int) size);
     }
 
     /**
      * Make the camera ride the given bone: both position and orientation are
-     * taken from the bone's world matrix, sampled once per tick across the
-     * recorded range.
+     * taken from the bone's world matrix, sampled at each keyframe's tick.
      *
      * <p>Replays only store the entity's anchor (feet) transform, so to attach
-     * the camera to e.g. the head we re-evaluate the form's bone matrices per
-     * tick on the live editor entity (the same one the gizmo is drawn from).
-     * The x/y/z channels are written from the bone's world translation and the
-     * yaw/pitch/roll channels from its world rotation, using the same
-     * conversion as the tracker camera clip.</p>
-     *
-     * <p>The bone's world transform is shaped by every animated channel of the
-     * replay - position, body/head rotation, pose and other form properties -
-     * so it's evaluated at every tick of the recorded range (the same density
-     * the recorder writes) rather than only at position keyframe ticks, which
-     * a property-animated or simplify()-trimmed replay barely has.</p>
-     *
-     * <p>Keyframes are written in clip-local time (recorded tick minus the
-     * range start), since keyframe clips are evaluated relative to their start.</p>
+     * the camera to e.g. the head we re-evaluate the form's bone matrices at
+     * every keyframe tick on the live editor entity (the same one the gizmo is
+     * drawn from). The x/y/z channels (copied from the recording) are overwritten
+     * in place and the yaw/pitch/roll channels are rebuilt from the bone's world
+     * rotation, using the same conversion as the tracker camera clip.</p>
      *
      * <p>This transiently mutates the live entity; the film controller re-applies
      * the correct cursor tick on the next frame.</p>
      */
-    private void sampleBoneTransform(KeyframeClip clip, Replay replay, IEntity entity, String bone, int min, int max)
+    private void sampleBoneTransform(KeyframeClip clip, Replay replay, IEntity entity, String bone)
     {
         Form form = entity.getForm();
 
@@ -833,9 +786,20 @@ public class UIClips extends UIElement
         /* Scene entities are only needed to resolve a form-level anchor onto another actor (rare). */
         IntObjectMap<IEntity> entities = this.getSceneEntities();
 
+        /* The x/y/z channels are independent and their keyframe sets can differ
+         * (e.g. a near-constant Y while walking on flat ground keeps far fewer
+         * keyframes than X/Z). Sample the bone once per tick across the union of
+         * all three channels and write each axis back by tick, so the channels
+         * stay aligned regardless of their individual keyframe counts. */
+        TreeSet<Integer> ticks = new TreeSet<>();
+
+        for (Keyframe<Double> keyframe : clip.x.getKeyframes()) ticks.add((int) keyframe.getTick());
+        for (Keyframe<Double> keyframe : clip.y.getKeyframes()) ticks.add((int) keyframe.getTick());
+        for (Keyframe<Double> keyframe : clip.z.getKeyframes()) ticks.add((int) keyframe.getTick());
+
         Vector3f position = new Vector3f();
 
-        for (int tick = min; tick <= max; tick++)
+        for (int tick : ticks)
         {
             replay.keyframes.apply(tick, entity);
             replay.properties.applyProperties(form, tick);
@@ -879,28 +843,17 @@ public class UIClips extends UIElement
             /* Position from the bone's world translation */
             matrix.getTranslation(position);
 
-            clip.x.insert(tick - min, (double) position.x);
-            clip.y.insert(tick - min, (double) position.y);
-            clip.z.insert(tick - min, (double) position.z);
+            clip.x.insert(tick, (double) position.x);
+            clip.y.insert(tick, (double) position.y);
+            clip.z.insert(tick, (double) position.z);
 
             /* Orientation from the bone's world rotation (same convention as the tracker clip) */
             Vector3f euler = MatrixUtils.cast3dTo3f(MatrixUtils.RotationOrder.YXZ.getEulerAngles(new Matrix3d(matrix)));
 
-            clip.pitch.insert(tick - min, Math.toDegrees(euler.x));
-            clip.yaw.insert(tick - min, Math.toDegrees(-euler.y) - 180D);
-            clip.roll.insert(tick - min, Math.toDegrees(euler.z));
+            clip.pitch.insert(tick, Math.toDegrees(euler.x));
+            clip.yaw.insert(tick, Math.toDegrees(-euler.y) - 180D);
+            clip.roll.insert(tick, Math.toDegrees(euler.z));
         }
-
-        /* Sampling writes a keyframe on every tick; collapse runs of identical
-         * values down to their endpoints - the same change detection regular
-         * replay recording applies via simplify() when a recording stops - so a
-         * bone that stays still keeps a single keyframe instead of one per tick. */
-        clip.x.simplify();
-        clip.y.simplify();
-        clip.z.simplify();
-        clip.pitch.simplify();
-        clip.yaw.simplify();
-        clip.roll.simplify();
     }
 
     private IntObjectMap<IEntity> getSceneEntities()
