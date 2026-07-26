@@ -678,6 +678,7 @@
 	"bbs.ui.film.replay.context.poses_to_limbs": "Poses to limbs",
 	"bbs.ui.film.replay.context.clear_ik": "Clear IK tracks",
 	"bbs.ui.film.replay.context.move_here": "Move replay here",
+	"bbs.ui.film.replay.context.import_here": "Import replay here",
 	"bbs.ui.film.replay.filter_sheets": "Filter tracks...",
 	"bbs.ui.film.replay.filter_sheets-title": "Keyframe tracks",
 	"bbs.ui.film.replay.filter_sheets-disable_all": "Disable all",

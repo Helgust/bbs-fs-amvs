@@ -1325,6 +1325,7 @@ public class UIReplaysEditor extends UIElement
 
                     menu.action(Icons.ADD, UIKeys.FILM_REPLAY_CONTEXT_ADD, () -> this.replaysList.replays.addReplay(finalVec, pitch, yaw));
                     menu.action(Icons.POINTER, UIKeys.FILM_REPLAY_CONTEXT_MOVE_HERE, () -> this.moveReplay(finalVec.x, finalVec.y, finalVec.z));
+                    menu.action(Icons.DOWNLOAD, UIKeys.FILM_REPLAY_CONTEXT_IMPORT_HERE, () -> this.replaysList.replays.importReplay(new Vector3d(finalVec)));
                 });
 
                 return true;

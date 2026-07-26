@@ -2065,6 +2065,16 @@ public class UIReplayList extends UIList<ReplayListEntry>
 
     public void importReplay()
     {
+        this.importReplay((Vector3d) null);
+    }
+
+    /**
+     * Open the library replay picker. When {@code target} is null the chosen replay is anchored where the
+     * camera is looking (used by the replay list menu); otherwise it is anchored to the supplied world
+     * position (used by the "import replay here" viewport action, which passes the block under the cursor).
+     */
+    public void importReplay(Vector3d target)
+    {
         List<String> keys = new ArrayList<>();
 
         for (String key : BBSMod.getReplays().getKeys())
@@ -2087,7 +2097,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
 
                 if (id != null)
                 {
-                    this.importReplay(id);
+                    this.importReplay(id, target);
                 }
             }
         });
@@ -2114,7 +2124,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
      * The recipe wouldn't transfer meaningfully anyway (formation indices, look-at targets and terrain
      * fitting are all relative to the source film/world).
      */
-    private void importReplay(String id)
+    private void importReplay(String id, Vector3d target)
     {
         Replay loaded = BBSMod.getReplays().load(id);
 
@@ -2124,7 +2134,15 @@ public class UIReplayList extends UIList<ReplayListEntry>
         }
 
         loaded.processing.flatten();
-        this.anchorReplayToCursor(loaded);
+
+        if (target == null)
+        {
+            this.anchorReplayToCursor(loaded);
+        }
+        else
+        {
+            this.anchorReplayToTarget(loaded, target);
+        }
 
         MapType wrapper = new MapType();
         ListType replays = new ListType();
@@ -2153,6 +2171,15 @@ public class UIReplayList extends UIList<ReplayListEntry>
             target.set(camera.getLookDirection()).mul(5F).add(camera.position);
         }
 
+        this.anchorReplayToTarget(replay, target);
+    }
+
+    /**
+     * Shift an imported replay's position keyframes so its first frame lands at the supplied world
+     * position. The whole trajectory's shape is preserved (every position keyframe gets the same delta).
+     */
+    private void anchorReplayToTarget(Replay replay, Vector3d target)
+    {
         double ox = replay.keyframes.x.interpolate(0F);
         double oy = replay.keyframes.y.interpolate(0F);
         double oz = replay.keyframes.z.interpolate(0F);
