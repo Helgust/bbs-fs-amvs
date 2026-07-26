@@ -777,6 +777,8 @@ public abstract class BaseFilmController
 
             if (replay != null)
             {
+                /* Replay-local: a looping replay wraps the film tick to its own window, and that must not
+                 * carry over to the next replay in the loop (which would then wrap an already wrapped tick). */
                 int replayTicks = replay.getTick(ticks);
 
                 this.updateEntityAndForm(entity, replayTicks);
