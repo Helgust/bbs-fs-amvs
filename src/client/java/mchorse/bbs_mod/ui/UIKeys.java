@@ -965,6 +965,9 @@ public class UIKeys
     public static final IKey SCENE_REPLAYS_RANDOM_TEXTURES_TITLE = L10n.lang("bbs.ui.scene.replays.random_textures.title");
     public static final IKey SCENE_REPLAYS_RANDOM_TEXTURES_DESCRIPTION = L10n.lang("bbs.ui.scene.replays.random_textures.description");
     public static final IKey SCENE_REPLAYS_RANDOM_TEXTURES_APPLY = L10n.lang("bbs.ui.scene.replays.random_textures.apply");
+    public static final IKey SCENE_REPLAYS_RANDOM_TEXTURES_CONFIRM = L10n.lang("bbs.ui.scene.replays.random_textures.confirm");
+    public static final IKey SCENE_REPLAYS_RANDOM_TEXTURES_CONFIRM_MORE = L10n.lang("bbs.ui.scene.replays.random_textures.confirm_more");
+    public static final IKey SCENE_REPLAYS_RANDOM_TEXTURES_CONFIRM_TITLE = L10n.lang("bbs.ui.scene.replays.random_textures.confirm_title");
     public static final IKey SCENE_REPLAYS_RANDOM_TEXTURES_ERROR = L10n.lang("bbs.ui.scene.replays.random_textures.error");
     public static final IKey SELECTORS_CONTEXT_ADD = L10n.lang("bbs.ui.selectors.context.add");
     public static final IKey SELECTORS_CONTEXT_REMOVE = L10n.lang("bbs.ui.selectors.context.remove");

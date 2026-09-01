@@ -69,6 +69,7 @@ import mchorse.bbs_mod.utils.Direction;
 import mchorse.bbs_mod.utils.MathUtils;
 import mchorse.bbs_mod.utils.NaturalOrderComparator;
 import mchorse.bbs_mod.utils.RayTracing;
+import mchorse.bbs_mod.utils.StringUtils;
 import mchorse.bbs_mod.utils.clips.Clip;
 import mchorse.bbs_mod.utils.clips.Clips;
 import mchorse.bbs_mod.utils.colors.Colors;
@@ -105,6 +106,8 @@ import java.util.function.Consumer;
 public class UIReplayList extends UIList<ReplayListEntry>
 {
     static String LAST_OFFSET = "0";
+    /** Texture paths listed in the random-textures confirmation. */
+    private static final int RANDOM_TEXTURES_SAMPLES = 4;
     private static final ProcessReplaysState PROCESS_STATE = new ProcessReplaysState();
 
     public UIFilmPanel panel;
@@ -204,10 +207,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
 
                 menu.action(Icons.PROCESSOR, UIKeys.SCENE_REPLAYS_CONTEXT_PROCESSING, this::openProcessingOverlay);
 
-                if (this.getSelectedReplays().size() > 1)
-                {
-                    menu.action(Icons.MATERIAL, UIKeys.SCENE_REPLAYS_CONTEXT_RANDOM_TEXTURES, this::openRandomTexturesOverlay);
-                }
+                menu.action(Icons.MATERIAL, UIKeys.SCENE_REPLAYS_CONTEXT_RANDOM_TEXTURES, this::openRandomTexturesOverlay);
 
                 if (data != null)
                 {
@@ -1022,20 +1022,25 @@ public class UIReplayList extends UIList<ReplayListEntry>
     {
         List<Replay> selected = new ArrayList<>(this.getSelectedReplays());
 
-        if (selected.size() < 2)
+        if (selected.isEmpty())
         {
             return;
         }
 
         UIFolderOverlayPanel panel = new UIFolderOverlayPanel(UIKeys.SCENE_REPLAYS_RANDOM_TEXTURES_TITLE, UIKeys.SCENE_REPLAYS_RANDOM_TEXTURES_DESCRIPTION, (folder) ->
         {
-            this.applyRandomTextures(folder, selected, this.getContext());
+            this.confirmRandomTextures(folder, selected, this.getContext());
         }).confirmLabel(UIKeys.SCENE_REPLAYS_RANDOM_TEXTURES_APPLY);
 
         UIOverlay.addOverlay(this.getContext(), panel, 320, 0.8F);
     }
 
-    private void applyRandomTextures(Link folder, List<Replay> replays, UIContext context)
+    /**
+     * The texture search recurses, so a folder picked one level too high can
+     * resolve to far more than intended. Summarize what was actually found and
+     * only apply once it's confirmed.
+     */
+    private void confirmRandomTextures(Link folder, List<Replay> replays, UIContext context)
     {
         if (folder == null || folder.source.isEmpty())
         {
@@ -1053,8 +1058,33 @@ public class UIReplayList extends UIList<ReplayListEntry>
             return;
         }
 
+        IKey message = UIKeys.SCENE_REPLAYS_RANDOM_TEXTURES_CONFIRM.format(
+            textures.size(),
+            folderName(folder),
+            countTextureFolders(textures),
+            sampleTextures(folder, textures),
+            replays.size()
+        );
+
+        UIConfirmOverlayPanel panel = new UIConfirmOverlayPanel(UIKeys.SCENE_REPLAYS_RANDOM_TEXTURES_CONFIRM_TITLE, message, (confirmed) ->
+        {
+            if (confirmed)
+            {
+                this.applyRandomTextures(textures, replays, context);
+            }
+        });
+
+        UIOverlay.addOverlay(context, panel, 340, 240);
+    }
+
+    private void applyRandomTextures(List<Link> textures, List<Replay> replays, UIContext context)
+    {
         int applied = 0;
         Random random = new Random();
+        /* Deal textures out of a reshuffled deck instead of picking each one
+         * independently, so every texture gets used before any is reused */
+        List<Link> deck = new ArrayList<>();
+        Link previous = null;
 
         for (Replay replay : replays)
         {
@@ -1070,7 +1100,21 @@ public class UIReplayList extends UIList<ReplayListEntry>
 
             if (property instanceof ValueLink valueLink)
             {
-                valueLink.set(textures.get(random.nextInt(textures.size())));
+                if (deck.isEmpty())
+                {
+                    deck.addAll(textures);
+                    Collections.shuffle(deck, random);
+
+                    /* Avoid repeating the last texture of the previous deck */
+                    if (deck.size() > 1 && deck.get(deck.size() - 1).equals(previous))
+                    {
+                        Collections.swap(deck, 0, deck.size() - 1);
+                    }
+                }
+
+                previous = deck.remove(deck.size() - 1);
+
+                valueLink.set(previous);
                 replay.form.set(copy);
                 applied += 1;
             }
@@ -1086,13 +1130,74 @@ public class UIReplayList extends UIList<ReplayListEntry>
         this.updateFilmEditor();
     }
 
+    /** Display name for a picked folder; a source root has an empty path. */
+    private static String folderName(Link folder)
+    {
+        String path = folder.path.endsWith("/")
+            ? folder.path.substring(0, folder.path.length() - 1)
+            : folder.path;
+
+        return path.isEmpty() ? folder.source : path;
+    }
+
+    /** How many distinct folders the collected textures actually spread across. */
+    private static int countTextureFolders(List<Link> textures)
+    {
+        Set<String> folders = new HashSet<>();
+
+        for (Link texture : textures)
+        {
+            folders.add(StringUtils.parentPath(texture.path));
+        }
+
+        return folders.size();
+    }
+
+    /**
+     * First few texture paths, relative to the picked folder, so the
+     * confirmation shows what kind of textures actually got swept up.
+     */
+    private static String sampleTextures(Link folder, List<Link> textures)
+    {
+        List<Link> sorted = new ArrayList<>(textures);
+
+        sorted.sort((a, b) -> NaturalOrderComparator.compare(true, a.path, b.path));
+
+        String prefix = folderName(folder) + "/";
+        StringBuilder builder = new StringBuilder();
+        int samples = Math.min(RANDOM_TEXTURES_SAMPLES, sorted.size());
+
+        for (int i = 0; i < samples; i++)
+        {
+            String path = sorted.get(i).path;
+
+            if (i > 0)
+            {
+                builder.append("\n");
+            }
+
+            builder.append(path.startsWith(prefix) ? path.substring(prefix.length()) : path);
+        }
+
+        if (sorted.size() > samples)
+        {
+            builder.append("\n").append(UIKeys.SCENE_REPLAYS_RANDOM_TEXTURES_CONFIRM_MORE.format(sorted.size() - samples).get());
+        }
+
+        return builder.toString();
+    }
+
+    /**
+     * Collect every .png underneath the given folder, including nested
+     * subfolders, so a folder tree acts as a single flat texture collection.
+     */
     private List<Link> collectTextures(Link folder)
     {
         List<Link> textures = new ArrayList<>();
 
-        for (Link link : BBSMod.getProvider().getLinksFromPath(folder, false))
+        for (Link link : BBSMod.getProvider().getLinksFromPath(folder, true))
         {
-            if (!link.path.endsWith("/") && link.path.endsWith(".png"))
+            if (!link.path.endsWith("/") && link.path.toLowerCase().endsWith(".png"))
             {
                 textures.add(link);
             }
