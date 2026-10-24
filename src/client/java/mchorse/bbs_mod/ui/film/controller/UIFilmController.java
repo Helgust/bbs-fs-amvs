@@ -132,6 +132,7 @@ public class UIFilmController extends UIElement implements GizmoViewport
     private int hoveredReplayIndex = -1;
     private StencilFormFramebuffer stencil = new StencilFormFramebuffer();
     private StencilMap stencilMap = new StencilMap();
+    private StencilFormFramebuffer selectionStencil = new StencilFormFramebuffer();
     private final GizmoInteraction gizmo = new GizmoInteraction(this);
 
     public final OrbitFilmCameraController orbit = new OrbitFilmCameraController(this);
@@ -194,6 +195,11 @@ public class UIFilmController extends UIElement implements GizmoViewport
             this.getOnionSkin().enabled.toggle();
 
             UIUtils.playClick();
+        }).strict().category(category);
+        this.keys().register(Keys.FILM_CONTROLLER_TOGGLE_SELECTION_HIGHLIGHT, () ->
+        {
+            BBSSettings.selectedReplayHighlight.set(!BBSSettings.selectedReplayHighlight.get());
+            this.getContext().notifyInfo(UIKeys.FILM_CONTROLLER_KEYS_TOGGLE_SELECTION_HIGHLIGHT_NOTIFICATION);
         }).category(category);
         this.keys().register(Keys.FILM_CONTROLLER_TOGGLE_MOTION_PATH, () ->
         {
@@ -1342,6 +1348,9 @@ public class UIFilmController extends UIElement implements GizmoViewport
             }
         }
 
+        /* Under the gizmo and the hover highlight */
+        this.renderSelection(context, area);
+
         /* The visual gizmo draws here, before the picking preview, so the bone /
          * sphere hover highlights composite on top of it. It moved out of the
          * world pass into the UI pipeline so its translucent parts blend
@@ -1365,27 +1374,7 @@ public class UIFilmController extends UIElement implements GizmoViewport
 
         boolean altPressed = Window.isAltPressed();
 
-        RenderSystem.depthFunc(GL11.GL_LESS);
-
-        /* Cache the global stuff */
-        MatrixStackUtils.cacheMatrices();
-
-        RenderSystem.setProjectionMatrix(this.panel.lastProjection, VertexSorter.BY_Z);
-        RenderSystem.setInverseViewRotationMatrix(new Matrix3f(this.panel.lastView).invert());
-
-        /* Render the stencil */
-        MatrixStack worldStack = this.worldRenderContext.matrixStack();
-
-        worldStack.push();
-        worldStack.loadIdentity();
-        MatrixStackUtils.multiply(worldStack, this.panel.lastView);
-        this.renderStencil(this.worldRenderContext, this.getContext(), altPressed);
-        worldStack.pop();
-
-        /* Return back to orthographic projection */
-        MatrixStackUtils.restoreMatrices();
-
-        RenderSystem.depthFunc(GL11.GL_ALWAYS);
+        this.renderInWorldSpace(() -> this.renderStencil(this.worldRenderContext, this.getContext(), altPressed));
 
         this.hoveredReplayIndex = -1;
 
@@ -1463,6 +1452,93 @@ public class UIFilmController extends UIElement implements GizmoViewport
 
             context.batcher.textCard(label, context.mouseX + 12, context.mouseY + 8);
         }
+    }
+
+    /**
+     * Run a stencil pass from the UI pipeline with the world camera's
+     * projection and view (captured by the panel during the world pass).
+     */
+    private void renderInWorldSpace(Runnable render)
+    {
+        RenderSystem.depthFunc(GL11.GL_LESS);
+
+        /* Cache the global stuff */
+        MatrixStackUtils.cacheMatrices();
+
+        RenderSystem.setProjectionMatrix(this.panel.lastProjection, VertexSorter.BY_Z);
+        RenderSystem.setInverseViewRotationMatrix(new Matrix3f(this.panel.lastView).invert());
+
+        MatrixStack worldStack = this.worldRenderContext.matrixStack();
+
+        worldStack.push();
+        worldStack.loadIdentity();
+        MatrixStackUtils.multiply(worldStack, this.panel.lastView);
+        render.run();
+        worldStack.pop();
+
+        /* Return back to orthographic projection */
+        MatrixStackUtils.restoreMatrices();
+
+        RenderSystem.depthFunc(GL11.GL_ALWAYS);
+    }
+
+    /**
+     * Outline the selected replay's model: render it alone into its own stencil
+     * buffer (one index for the whole model), then draw the texels around that
+     * silhouette. It has no depth from the world, so it shows through blocks.
+     */
+    private void renderSelection(UIContext context, Area area)
+    {
+        IEntity entity = this.getCurrentEntity();
+        Replay replay = this.panel.replayEditor.getReplay();
+
+        if (!BBSSettings.selectedReplayHighlight.get() || this.isRecording() || this.worldRenderContext == null
+            || entity == null || replay == null || this.pov == CAMERA_MODE_FIRST_PERSON)
+        {
+            return;
+        }
+
+        this.ensureStencilFramebuffer(this.selectionStencil, Link.bbs("stencil_film_selection"));
+
+        Texture texture = this.selectionStencil.getFramebuffer().getMainTexture();
+
+        this.renderInWorldSpace(() ->
+        {
+            /* Picking re-runs setup() on this map later in the frame */
+            this.stencilMap.setup();
+            this.stencilMap.objectIndex = 1;
+            this.stencilMap.setIncrement(false);
+            this.selectionStencil.apply();
+
+            BaseFilmController.renderEntity(FilmControllerContext.instance
+                .setup(this.getEntities(), entity, replay, this.worldRenderContext)
+                .transition(this.editorController.getTransition(entity, this.worldRenderContext.tickDelta()))
+                .stencil(this.stencilMap)
+                .relative(replay.relative.get()));
+
+            this.selectionStencil.unbind();
+            MinecraftClient.getInstance().getFramebuffer().beginWrite(true);
+        });
+
+        ShaderProgram program = BBSShaders.getPickerOutlineProgram();
+        GlUniform target = program.getUniform("Target");
+        GlUniform highlight = program.getUniform("HighlightColor");
+        int color = BBSSettings.selectedReplayColor.get();
+        int w = texture.width;
+        int h = texture.height;
+
+        if (target != null)
+        {
+            target.set(1);
+        }
+
+        if (highlight != null)
+        {
+            highlight.set(Colors.getR(color), Colors.getG(color), Colors.getB(color), Colors.getA(color));
+        }
+
+        RenderSystem.enableBlend();
+        context.batcher.texturedBox(BBSShaders::getPickerOutlineProgram, texture.id, Colors.WHITE, area.x, area.y, area.w, area.h, 0, h, w, 0, w, h);
     }
 
     public void startRenderFrame(float tickDelta)
@@ -1636,7 +1712,7 @@ public class UIFilmController extends UIElement implements GizmoViewport
             return;
         }
 
-        this.ensureStencilFramebuffer();
+        this.ensureStencilFramebuffer(this.stencil, Link.bbs("stencil_film"));
 
         /* Match the visual gizmo's on-screen size compensation (see
          * Gizmo#setViewportScale) so the pick handles line up with what is drawn. */
@@ -1713,17 +1789,19 @@ public class UIFilmController extends UIElement implements GizmoViewport
         MinecraftClient.getInstance().getFramebuffer().beginWrite(true);
     }
 
-    private void ensureStencilFramebuffer()
+    private void ensureStencilFramebuffer(StencilFormFramebuffer stencil, Link id)
     {
-        this.stencil.setup(Link.bbs("stencil_film"));
+        stencil.setup(id);
 
-        Texture mainTexture = this.stencil.getFramebuffer().getMainTexture();
-        int w = BBSRendering.getVideoWidth();
-        int h = BBSRendering.getVideoHeight();
+        Texture mainTexture = stencil.getFramebuffer().getMainTexture();
+        float scale = BBSModClient.getGUIScale();
+        int w = Math.round(BBSRendering.getVideoWidth() * scale);
+        int h = Math.round(BBSRendering.getVideoHeight() * scale);
 
+        /* Compare against the GUI-scaled size, or the buffer is reallocated every frame */
         if (mainTexture.width != w || mainTexture.height != h)
         {
-            this.stencil.resizeGUI(w, h);
+            stencil.resize(w, h);
         }
     }
 }

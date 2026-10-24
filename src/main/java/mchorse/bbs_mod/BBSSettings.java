@@ -37,6 +37,8 @@ public class BBSSettings {
 	public static ValueLanguage language;
 	public static ValueInt primaryColor;
 	public static ValueInt stencilHighlightColor;
+	public static ValueBoolean selectedReplayHighlight;
+	public static ValueInt selectedReplayColor;
 	public static ValueBoolean enableTrackpadIncrements;
 	public static ValueBoolean enableTrackpadScrolling;
 	public static ValueFloat userIntefaceScale;
@@ -491,6 +493,8 @@ public class BBSSettings {
 		interfaceShadows = builder.getBoolean("interface_shadows", true);
 		primaryColor = builder.getInt("primary_color", DEFAULT_PRIMARY_COLOR).color();
 		stencilHighlightColor = builder.getInt("stencil_highlight_color", 0x2EFFFFFF).colorAlpha();
+		selectedReplayHighlight = builder.getBoolean("selected_replay_highlight", true);
+		selectedReplayColor = builder.getInt("selected_replay_color", 0xFFFFA500).colorAlpha();
 		theme = builder.getInt("theme", DEFAULT_THEME);
 		editorTrackWidth = builder.getInt("track_width", 2, 1, 10);
 		keyframeDefaultShape = builder.getInt("keyframe_default_shape", 0, 0, KeyframeShape.values().length - 1);
