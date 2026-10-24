@@ -232,21 +232,26 @@ public class KeyframeChannel <T> extends ValueList<Keyframe<T>>
     {
         this.preNotify();
 
-        Keyframe<T> prev;
-
-        if (!this.list.isEmpty())
+        /* constraint: Recorder appends to ~33 channels per recorded entity every tick, so an append must not sort or renumber the whole list */
+        if (this.list.isEmpty() || tick > this.list.get(this.list.size() - 1).getTick())
         {
-            prev = this.list.get(0);
+            this.add(new Keyframe<>(String.valueOf(this.list.size()), this.factory, tick, value));
+            this.postNotify();
 
-            if (tick < prev.getTick())
-            {
-                this.add(0, new Keyframe<>("", this.factory, tick, value));
-                this.sort();
+            return this.list.size() - 1;
+        }
 
-                this.postNotify();
+        Keyframe<T> prev = this.list.get(0);
 
-                return 0;
-            }
+        /* Inserted in order already, only the ids after it shifted */
+        if (tick < prev.getTick())
+        {
+            this.add(0, new Keyframe<>("", this.factory, tick, value));
+            this.sync();
+
+            this.postNotify();
+
+            return 0;
         }
 
         prev = null;
@@ -272,7 +277,7 @@ public class KeyframeChannel <T> extends ValueList<Keyframe<T>>
         }
 
         this.add(index, new Keyframe<T>("", this.factory, tick, value));
-        this.sort();
+        this.sync();
         this.postNotify();
 
         return index;
