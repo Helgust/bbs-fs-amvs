@@ -661,7 +661,7 @@
 	"bbs.ui.film.player_settings.xp_level": "Experience level",
 	"bbs.ui.film.player_settings.xp_progress": "Experience progress",
 	"bbs.ui.film.player_settings.mob_recording_radius": "Mob recording radius",
-	"bbs.ui.film.player_settings.mob_recording_radius_tooltip": "When recording a player replay (Right Alt), nearby mobs within this radius (in blocks) are recorded into their own replays with a mob form. 0 disables it.",
+	"bbs.ui.film.player_settings.mob_recording_radius_tooltip": "When recording a player replay (Right Alt), nearby mobs within this radius (in blocks) are recorded into their own replays, with their own form if they have one (like actors), or else a mob form. 0 disables it.",
 	"bbs.ui.film.apply_player_settings_to_player": "Apply to player",
 	"bbs.ui.film.replace_inventory": "Replace inventory",
 	"bbs.ui.film.replay.actor": "Actor",

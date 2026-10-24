@@ -5,6 +5,7 @@ import mchorse.bbs_mod.BBSSettings;
 import mchorse.bbs_mod.camera.data.Position;
 import mchorse.bbs_mod.camera.utils.TimeUtils;
 import mchorse.bbs_mod.client.BBSRendering;
+import mchorse.bbs_mod.entity.IEntityFormProvider;
 import mchorse.bbs_mod.film.replays.FormProperties;
 import mchorse.bbs_mod.film.replays.Inventory;
 import mchorse.bbs_mod.film.replays.ReplayKeyframes;
@@ -193,7 +194,9 @@ public class Recorder extends WorldFilmController
 
         for (LivingEntity entity : player.getWorld().getEntitiesByClass(LivingEntity.class, box, (e) -> e != player && e.isAlive() && e.squaredDistanceTo(player) <= radiusSq))
         {
-            MobForm form = Morph.createMobForm(entity);
+            Form form = entity instanceof IEntityFormProvider provider && provider.getForm() != null
+                ? FormUtils.copy(provider.getForm())
+                : Morph.createMobForm(entity);
 
             if (form != null)
             {
@@ -214,16 +217,17 @@ public class Recorder extends WorldFilmController
     }
 
     /**
-     * A mob captured at recording start: its snapshotted {@link MobForm} plus the
-     * keyframes recorded each tick from the live entity it wraps.
+     * A mob captured at recording start: a copy of its own form when it's an
+     * {@link IEntityFormProvider} that has one, or else a snapshotted {@link MobForm},
+     * plus the keyframes recorded each tick from the live entity it wraps.
      */
     public static class RecordedMob
     {
-        public final MobForm form;
+        public final Form form;
         public final MCEntity entity;
         public final ReplayKeyframes keyframes = new ReplayKeyframes("keyframes");
 
-        public RecordedMob(MobForm form, Entity mcEntity)
+        public RecordedMob(Form form, Entity mcEntity)
         {
             this.form = form;
             this.entity = new MCEntity(mcEntity);
