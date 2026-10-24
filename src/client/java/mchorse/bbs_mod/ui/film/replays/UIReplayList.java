@@ -151,6 +151,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
             .canPaste(() -> this.panel != null && this.panel.getData() != null);
 
         this.multi().sorting();
+        this.scroll.scrollSpeed = this.scroll.scrollItemSize * 2;
         this.context((menu) ->
         {
             Film film = this.panel.getData();
