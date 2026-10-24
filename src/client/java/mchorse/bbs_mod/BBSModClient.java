@@ -54,6 +54,7 @@ import mchorse.bbs_mod.ui.morphing.UIMorphingPanel;
 import mchorse.bbs_mod.ui.utils.icons.Icons;
 import mchorse.bbs_mod.ui.utils.keys.KeyCombo;
 import mchorse.bbs_mod.ui.utils.keys.KeybindSettings;
+import mchorse.bbs_mod.utils.CollectionUtils;
 import mchorse.bbs_mod.utils.MathUtils;
 import mchorse.bbs_mod.utils.ScreenshotRecorder;
 import mchorse.bbs_mod.utils.VideoRecorder;
@@ -843,7 +844,7 @@ public class BBSModClient implements ClientModInitializer
             else
             {
                 Replay replay = panel.replayEditor.getReplay();
-                int index = panel.getData().replays.getList().indexOf(replay);
+                int index = CollectionUtils.getIndex(panel.getData().replays.getList(), replay);
 
                 if (index >= 0)
                 {

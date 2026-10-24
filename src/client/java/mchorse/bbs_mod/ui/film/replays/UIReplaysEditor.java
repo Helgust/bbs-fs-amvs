@@ -1361,7 +1361,7 @@ public class UIReplaysEditor extends UIElement
             lastFilm = this.film.getId();
             Replay r = this.getReplay();
 
-            lastReplay = r == null ? 0 : this.film.replays.getList().indexOf(r);
+            lastReplay = r == null ? 0 : CollectionUtils.getIndex(this.film.replays.getList(), r);
         }
     }
 
@@ -1436,7 +1436,7 @@ public class UIReplaysEditor extends UIElement
     {
         super.collectUndoData(data);
 
-        int index = this.film.replays.getList().indexOf(this.getReplay());
+        int index = CollectionUtils.getIndex(this.film.replays.getList(), this.getReplay());
 
         data.putInt("replay", index);
         data.put("selection", DataStorageUtils.intListToData(this.replaysList.replays.getCurrentIndices()));

@@ -546,7 +546,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
             return -1;
         }
 
-        return film.replays.getList().indexOf(r);
+        return CollectionUtils.getIndex(film.replays.getList(), r);
     }
 
     public void refreshReplayList()
@@ -902,8 +902,8 @@ public class UIReplayList extends UIList<ReplayListEntry>
 
         this.assignReplayCategoryValue(ef.replay, et.replay.category.get());
 
-        int globalFrom = all.indexOf(ef.replay);
-        int globalTo = all.indexOf(et.replay);
+        int globalFrom = CollectionUtils.getIndex(all, ef.replay);
+        int globalTo = CollectionUtils.getIndex(all, et.replay);
 
         if (globalFrom < 0 || globalTo < 0)
         {
@@ -2556,7 +2556,7 @@ public class UIReplayList extends UIList<ReplayListEntry>
         Film film = this.panel.getData();
         List<Replay> removing = new ArrayList<>(this.getSelectedReplays());
         Replay focus = removing.get(0);
-        int globalFocus = film.replays.getList().indexOf(focus);
+        int globalFocus = CollectionUtils.getIndex(film.replays.getList(), focus);
 
         for (Replay replay : removing)
         {

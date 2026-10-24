@@ -221,7 +221,7 @@ public class UIFilmController extends UIElement implements GizmoViewport
     {
         List<Replay> list = this.panel.getData().replays.getList();
 
-        int index = list.indexOf(this.getReplay());
+        int index = CollectionUtils.getIndex(list, this.getReplay());
         int newIndex = MathUtils.cycler(index + direction, list);
         Replay replay = list.get(newIndex);
 
@@ -338,7 +338,7 @@ public class UIFilmController extends UIElement implements GizmoViewport
 
         Replay replay = this.getReplay();
 
-        return replay == null ? -1 : this.panel.getData().replays.getList().indexOf(replay);
+        return replay == null ? -1 : CollectionUtils.getIndex(this.panel.getData().replays.getList(), replay);
     }
 
     public StencilFormFramebuffer getStencil()
@@ -553,7 +553,7 @@ public class UIFilmController extends UIElement implements GizmoViewport
             MinecraftClient.getInstance().setScreen(null);
 
             Replay replay = this.panel.replayEditor.getReplay();
-            int index = this.panel.getData().replays.getList().indexOf(replay);
+            int index = CollectionUtils.getIndex(this.panel.getData().replays.getList(), replay);
 
             if (index >= 0)
             {

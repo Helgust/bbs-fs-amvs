@@ -29,6 +29,7 @@ import mchorse.bbs_mod.ui.framework.UIContext;
 import mchorse.bbs_mod.ui.utils.Area;
 import mchorse.bbs_mod.ui.utils.keys.KeyAction;
 import mchorse.bbs_mod.ui.utils.keys.KeyCombo;
+import mchorse.bbs_mod.utils.CollectionUtils;
 import mchorse.bbs_mod.utils.MathUtils;
 import mchorse.bbs_mod.utils.Pair;
 import mchorse.bbs_mod.utils.interps.Lerps;
@@ -454,7 +455,7 @@ public class OrbitFilmCameraController implements ICameraController
             return null;
         }
 
-        int index = film.replays.getList().indexOf(replay);
+        int index = CollectionUtils.getIndex(film.replays.getList(), replay);
 
         return index < 0 ? null : this.controller.getEntities().get(index);
     }
