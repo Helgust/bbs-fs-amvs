@@ -280,7 +280,7 @@ public class KeyframeChannel <T> extends ValueList<Keyframe<T>>
 
     public void sort()
     {
-        this.list.sort((a, b) -> (int) (a.getTick() - b.getTick()));
+        this.list.sort((a, b) -> Float.compare(a.getTick(), b.getTick()));
 
         this.sync();
     }
